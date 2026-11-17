@@ -48,7 +48,13 @@ export class Missions {
   }
   cleanup() {
     for (const e of this.spawned) {
-      if (e.model) { if (this.G.cars.includes(e)) removeCar(this.G, e); }
+      if (e.model) {
+        // Rio may still be sitting in a spawned car (e.g. the Aurum at the pier
+        // the moment the finale completes): put him back on foot first, or
+        // removeCar leaves him car-less with his mesh still hidden — invisible.
+        if (this.G.player.car === e && this.G.exitCar) this.G.exitCar();
+        if (this.G.cars.includes(e)) removeCar(this.G, e);
+      }
       else if (this.G.peds.includes(e)) removePed(this.G, e);
     }
     this.spawned = [];
@@ -121,6 +127,15 @@ export class Missions {
   fenceCheck() {
     const G = this.G, car = G.player.car;
     if (!car || !car.stolen || car.model.id === 'police') return false;
+    // A live mission's target car is cargo, not merchandise: fencing it early
+    // (the Vesper during Sirens stage 1, the rival car, the Aurum) deletes the
+    // objective vehicle and softlocks the chain — those missions have no timer
+    // or fail path to recover it. The one exception is Sirens stage 2, where
+    // fencing the Vesper IS the objective.
+    if (this.active && this.targetCar && car === this.targetCar && !(this.idx === 3 && this.stage === 2)) {
+      G.hud.banner('NOT FOR SALE', 'This car is mission cargo — the fence will not touch it.', 3);
+      return false;
+    }
     for (const shop of CHOP_SHOPS) {
       if (dist2d(car.mesh.position.x, car.mesh.position.z, shop.x, shop.z + 7) < 7.5) {
         const pay = fenceValue(car);

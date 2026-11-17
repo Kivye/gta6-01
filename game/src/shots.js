@@ -21,12 +21,17 @@ export function stageScene(G, scene) {
   G.shotMode = scene;
   if (scene === 'cover') {
     // Police chase on a Marina boulevard: Rio's sports car fleeing, two cruisers behind.
-    P.x = 2; P.z = 84; P.angle = 0;
-    const hero = park(G, 'sports', 2, 84, 0, 'player');
+    P.x = 2; P.z = 86; P.angle = 0;
+    const hero = park(G, 'sports', 2, 86, 0, 'player');
     hero.stolen = true; hero.speed = 16;
     P.car = hero; P.mesh.visible = false;
-    park(G, 'police', -2.5, 73, 0.1, 'police').speed = 15;
-    park(G, 'police', 4.5, 67, -0.08, 'police').speed = 15;
+    // Both cruisers ride in the middle of the road corridor, staggered. The
+    // old trailing spot (4.5, 67) parked the cruiser's rear inside the
+    // building plot at (8.4, 63.16), so the corner swallowed half the car;
+    // these spots keep every car footprint clear of the plots and both
+    // cruisers fully in frame (verified by screen-rect probe, seed 1).
+    park(G, 'police', 0, 76, 0.1, 'police').speed = 15;
+    park(G, 'police', 2.5, 69, -0.08, 'police').speed = 15;
     park(G, 'taxi', -24, 96, Math.PI / 2); park(G, 'sedan', 26, 70, -Math.PI / 2);
     for (let i = 0; i < 6; i++) spawnPed(G, -6 + i * 2.4, 96 + (i % 3));
     setWanted(G, 3);
@@ -34,7 +39,7 @@ export function stageScene(G, scene) {
     G.missions.idx = 2; G.missions.stage = 0; G.missions.active = true;
     G.hud.setObjective('Stop the rival car (ram it or shoot it), then grab the briefcase.', { x: 30, z: 40 });
     P.camYaw = Math.PI; P.camPitch = 0.3;
-    G.camera.position.set(2.5, 6, 54); G.camera.lookAt(0, 1.3, 84);
+    G.camera.position.set(2, 6.5, 52); G.camera.lookAt(1, 1.3, 88);
   } else if (scene === 'onfoot') {
     P.x = -22; P.z = 6; P.angle = 2.6; P.mesh.position.set(P.x, 0, P.z); P.mesh.rotation.y = P.angle;
     park(G, 'taxi', -26, 12, 0); park(G, 'sedan', -20, -14, Math.PI); park(G, 'compact', -6, 2, Math.PI / 2);
