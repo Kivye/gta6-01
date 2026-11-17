@@ -1,8 +1,10 @@
 // Palmshade Heat playtest: drives the real game in headless Chromium and checks
 // the full loop — menu, walking, stealing, driving, wanted, missions, death, bust.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { cpSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const require2 = createRequire('/home/hatch/workspace/makefun/entries/makefun-frontend-01/scratch/shots/node_modules/playwright-core/package.json');
 const { chromium } = require2('playwright-core');
@@ -178,6 +180,34 @@ try {
 } finally {
   await browser.close();
   server.kill();
+}
+// Hand-in guard, exercised outside the browser: stage a throwaway copy of
+// this repo (main.ts + vendor + game + screenshots, well under 2 MB), plant
+// a screenshot one byte over the 262,144-byte per-screenshot cap, and run the
+// real hand-in program against it. It must refuse — non-zero exit — and its
+// error must name the offending file and its size, not fail silently or pass.
+{
+  const repoRoot = new URL('.', import.meta.url).pathname;
+  const stage = mkdtempSync(join(tmpdir(), 'palmshade-handin-'));
+  try {
+    for (const item of ['main.ts', 'vendor', 'game', 'screenshots']) {
+      cpSync(join(repoRoot, item), join(stage, item), { recursive: true });
+    }
+    writeFileSync(join(stage, 'screenshots', '9-oversized.jpg'), Buffer.alloc(262145));
+    const run = spawnSync('node', ['main.ts'], {
+      cwd: stage,
+      env: { ...process.env, MAKEFUN_OUTPUT_DIR: join(stage, 'out') },
+      encoding: 'utf8',
+    });
+    const said = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
+    check(
+      'hand-in rejects an oversized screenshot by name',
+      run.status !== 0 && said.includes('9-oversized.jpg') && said.includes('262145'),
+      `exit ${run.status}`,
+    );
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
+  }
 }
 const failed = results.filter((r) => !r.ok).length;
 console.log(`\n${results.length - failed}/${results.length} checks passed`);

@@ -132,9 +132,23 @@ function startGame(fresh) {
   }
   const P = G.player;
   if (P.car) exitCar(G);
+  // setWanted(G, 0) below only zeroes the star count: police.js clears the
+  // pursuit timers solely when the new level is above zero, so a bust that
+  // was part-way through its grab timer — and the hidden/decay timers —
+  // would otherwise carry into this fresh run and bust Rio almost instantly
+  // on first police contact. Reset them explicitly here.
+  G.bustT = 0; G.hiddenT = 0; G.decayT = 0; G.lastSeenT = 0;
   P.x = 2; P.z = 100; P.angle = Math.PI; P.health = TUNING.playerHealth; P.mesh.visible = true;
   P.mesh.position.set(P.x, 0, P.z);
   P.mesh.rotation.y = P.angle; P.camYaw = Math.PI; P.camPitch = 0.32;
+  // Same leftover-state sweep, second half: a stale danger marker would make
+  // pedestrians flee Rio's spawn point, a leftover camera shake or fire
+  // cooldown would bleed into the opening seconds, and the engine/siren
+  // loops from a previous run keep sounding until something else stops them.
+  // A dead flag, if ever set, must not follow Rio into the new run either.
+  G.danger = null; G.shake = 0; G.spawnCd = 0; G.fireCd = 0;
+  P.dead = false; P.walkPhase = 0;
+  G.audio.setEngine(false, 0); G.audio.setSiren(false, 0);
   setWanted(G, 0);
   hideOverlay();
   G.hud.show();

@@ -14,6 +14,13 @@ import { buildDossier } from './vendor/makefun-game.ts';
 const repoDir = fileURLToPath(new URL('.', import.meta.url));
 const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
+// Pre-flight caps from the gta6-01 kit rules, named once here so the
+// validation below and the dossier options at the bottom cannot drift apart:
+// the whole game payload may not exceed game_max_bytes, and no single
+// screenshot may exceed the per-screenshot byte cap.
+const GAME_MAX_BYTES = 50331648;
+const SCREENSHOT_MAX_BYTES = 262144;
+
 // Inventory of a copied payload directory: every file under it, in stable
 // sorted path order, with its byte size, plus the total payload byte count.
 // Computed from the files themselves, so it is deterministic — the same
@@ -37,6 +44,35 @@ function payloadInventory(root) {
   return { files, totalBytes };
 }
 
+// Pre-flight validation over the two payload inventories, run before the
+// dossier is built so a bad hand-in fails here with a precise reason rather
+// than at the sealed gate. Every violation names the offending file together
+// with its actual size and the cap it broke:
+//   - each screenshots/*.jpg file, on its own, against SCREENSHOT_MAX_BYTES;
+//   - the game payload as a whole against GAME_MAX_BYTES (game_max_bytes),
+//     naming the largest single contributor when the total is over.
+// Returns nothing on success; the caller logs the inventories it validated.
+function validatePayload(gamePayload, shotsPayload) {
+  for (const shot of shotsPayload.files) {
+    if (!/\.jpg$/i.test(shot.path)) continue;
+    if (shot.bytes > SCREENSHOT_MAX_BYTES) {
+      throw new Error(
+        `screenshot ${shot.path} is ${shot.bytes} bytes, over the ${SCREENSHOT_MAX_BYTES}-byte per-screenshot cap`,
+      );
+    }
+  }
+  if (gamePayload.totalBytes > GAME_MAX_BYTES) {
+    const largest = gamePayload.files.reduce(
+      (big, f) => (big === null || f.bytes > big.bytes ? f : big),
+      null,
+    );
+    const culprit = largest ? `; largest file ${largest.path} is ${largest.bytes} bytes` : '';
+    throw new Error(
+      `game payload is ${gamePayload.totalBytes} bytes, over the ${GAME_MAX_BYTES}-byte cap (game_max_bytes)${culprit}`,
+    );
+  }
+}
+
 mkdirSync(outDir, { recursive: true });
 cpSync(join(repoDir, 'game'), join(outDir, 'game'), { recursive: true });
 mkdirSync(join(outDir, 'screenshots'), { recursive: true });
@@ -45,16 +81,16 @@ if (existsSync(join(repoDir, 'screenshots'))) {
 }
 
 const payload = payloadInventory(join(outDir, 'game'));
-if (payload.totalBytes > 50331648) {
-  throw new Error(`game payload is ${payload.totalBytes} bytes, over the 50331648-byte cap (game_max_bytes)`);
-}
+const shotsPayload = payloadInventory(join(outDir, 'screenshots'));
+validatePayload(payload, shotsPayload);
 console.log(`game payload: ${payload.files.length} files, ${payload.totalBytes} bytes`);
+console.log(`screenshots: ${shotsPayload.files.length} files, ${shotsPayload.totalBytes} bytes`);
 
 const dossier = buildDossier(outDir, {
   text_max_bytes: 163840,
-  screenshots: { max: 4, max_bytes: 262144 },
+  screenshots: { max: 4, max_bytes: SCREENSHOT_MAX_BYTES },
   game_max_files: 993,
-  game_max_bytes: 50331648,
+  game_max_bytes: GAME_MAX_BYTES,
   game_path_max_bytes: 1000,
 });
 writeFileSync(join(outDir, 'dossier.json'), dossier);
