@@ -91,6 +91,23 @@ function respawn(place) {
   P.mesh.visible = true;
   P.x = place.x; P.z = place.z; P.health = TUNING.playerHealth; P.dead = false;
   P.mesh.position.set(P.x, 0, P.z);
+  // setWanted(G, 0) only zeroes the star count: police.js clears the pursuit
+  // timers solely when the new level is above zero, and bustT is not cleared
+  // there at all — so a grab timer that was part-way to TUNING.bustTime when
+  // Rio died or was busted would survive the respawn and, since updatePolice
+  // never decays bustT while wanted is 0, greet the next wanted episode
+  // almost fully charged: a near-instant bust on first police contact.
+  // startGame already resets these for a fresh run; a respawn is a fresh
+  // run too. The stale danger marker and blinking flag go with them, so
+  // pedestrians do not flee the hospital/station spawn and the HUD does not
+  // blink stars Rio no longer has.
+  G.bustT = 0; G.hiddenT = 0; G.decayT = 0; G.lastSeenT = 0;
+  G.danger = null; G.wantedBlinking = false;
+  // Same sweep, second half (startGame does this too): death sets a camera
+  // shake via damagePlayer and a shot may have just put the pistol on
+  // cooldown; neither belongs in the first seconds back on the street, and
+  // a leftover police spawn cooldown would delay the next legitimate spawn.
+  G.shake = 0; G.fireCd = 0; G.recoil = 0; G.spawnCd = 0;
   setWanted(G, 0);
   for (const cop of policeCars(G)) cop.speed = 0;
   hideOverlay();

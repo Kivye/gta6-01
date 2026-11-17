@@ -20,6 +20,11 @@ const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 // screenshot may exceed the per-screenshot byte cap.
 const GAME_MAX_BYTES = 50331648;
 const SCREENSHOT_MAX_BYTES = 262144;
+// Two more caps from the same kit rules, likewise named once here: the
+// dossier handed in may not exceed 1.5 MiB, and the game's page itself,
+// game/index.html, may not exceed 1 MiB.
+const DOSSIER_MAX_BYTES = 1572864;
+const INDEX_HTML_MAX_BYTES = 1048576;
 
 // Inventory of a copied payload directory: every file under it, in stable
 // sorted path order, with its byte size, plus the total payload byte count.
@@ -50,9 +55,15 @@ function payloadInventory(root) {
 // with its actual size and the cap it broke:
 //   - each screenshots/*.jpg file, on its own, against SCREENSHOT_MAX_BYTES;
 //   - the game payload as a whole against GAME_MAX_BYTES (game_max_bytes),
-//     naming the largest single contributor when the total is over.
+//     naming the largest single contributor when the total is over;
+//   - game/index.html, on its own, against INDEX_HTML_MAX_BYTES, as part of
+//     the same sorted game/ walk (its inventory entry is the one named
+//     exactly "index.html");
+//   - the dossier bytes, when the caller passes them (dossierBytes, the
+//     exact bytes buildDossier produced and about to be written), against
+//     DOSSIER_MAX_BYTES.
 // Returns nothing on success; the caller logs the inventories it validated.
-function validatePayload(gamePayload, shotsPayload) {
+function validatePayload(gamePayload, shotsPayload, dossierBytes = null) {
   for (const shot of shotsPayload.files) {
     if (!/\.jpg$/i.test(shot.path)) continue;
     if (shot.bytes > SCREENSHOT_MAX_BYTES) {
@@ -60,6 +71,19 @@ function validatePayload(gamePayload, shotsPayload) {
         `screenshot ${shot.path} is ${shot.bytes} bytes, over the ${SCREENSHOT_MAX_BYTES}-byte per-screenshot cap`,
       );
     }
+  }
+  for (const file of gamePayload.files) {
+    if (file.path !== 'index.html') continue;
+    if (file.bytes > INDEX_HTML_MAX_BYTES) {
+      throw new Error(
+        `game/index.html is ${file.bytes} bytes, over the ${INDEX_HTML_MAX_BYTES}-byte game/index.html cap`,
+      );
+    }
+  }
+  if (dossierBytes !== null && dossierBytes > DOSSIER_MAX_BYTES) {
+    throw new Error(
+      `dossier.json is ${dossierBytes} bytes, over the ${DOSSIER_MAX_BYTES}-byte dossier cap`,
+    );
   }
   if (gamePayload.totalBytes > GAME_MAX_BYTES) {
     const largest = gamePayload.files.reduce(
@@ -93,4 +117,10 @@ const dossier = buildDossier(outDir, {
   game_max_bytes: GAME_MAX_BYTES,
   game_path_max_bytes: 1000,
 });
+// Hand-in gate for the dossier itself: check the exact bytes buildDossier
+// produced against the dossier cap before anything is written, so an
+// oversized dossier aborts the hand-in here instead of reaching the sealed
+// gate. The check only reads the byte count — the bytes written below are
+// the very bytes buildDossier returned, unchanged.
+validatePayload(payload, shotsPayload, dossier.byteLength);
 writeFileSync(join(outDir, 'dossier.json'), dossier);

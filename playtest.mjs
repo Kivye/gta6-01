@@ -209,6 +209,35 @@ try {
     rmSync(stage, { recursive: true, force: true });
   }
 }
+// Second hand-in guard, for the new game/index.html cap (1 MiB): stage the
+// same throwaway copy, replace its game/index.html with a file one byte
+// over the cap, and run the real hand-in. It must refuse — non-zero exit —
+// with an error naming game/index.html and its size, from validatePayload's
+// sorted game/ walk, before any dossier is built.
+{
+  const repoRoot = new URL('.', import.meta.url).pathname;
+  const stage = mkdtempSync(join(tmpdir(), 'palmshade-handin-index-'));
+  try {
+    for (const item of ['main.ts', 'vendor', 'game', 'screenshots']) {
+      cpSync(join(repoRoot, item), join(stage, item), { recursive: true });
+    }
+    writeFileSync(join(stage, 'game', 'index.html'), Buffer.alloc(1048577));
+    const run = spawnSync('node', ['main.ts'], {
+      cwd: stage,
+      env: { ...process.env, MAKEFUN_OUTPUT_DIR: join(stage, 'out') },
+      encoding: 'utf8',
+    });
+    const said = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
+    check(
+      'hand-in rejects an oversized game/index.html by name',
+      run.status !== 0 && said.includes('index.html') && said.includes('1048577') && said.includes('1048576')
+        && !existsSync(join(stage, 'out', 'dossier.json')),
+      `exit ${run.status}`,
+    );
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
+  }
+}
 const failed = results.filter((r) => !r.ok).length;
 console.log(`\n${results.length - failed}/${results.length} checks passed`);
 process.exit(failed ? 1 : 0);
