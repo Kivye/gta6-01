@@ -123,8 +123,9 @@ function startGame(fresh) {
   }
   const P = G.player;
   if (P.car) exitCar(G);
-  P.x = 2; P.z = 100; P.health = TUNING.playerHealth; P.mesh.visible = true;
+  P.x = 2; P.z = 100; P.angle = Math.PI; P.health = TUNING.playerHealth; P.mesh.visible = true;
   P.mesh.position.set(P.x, 0, P.z);
+  P.mesh.rotation.y = P.angle; P.camYaw = Math.PI; P.camPitch = 0.32;
   setWanted(G, 0);
   hideOverlay();
   G.hud.show();
