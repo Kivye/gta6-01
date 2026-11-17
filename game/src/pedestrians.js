@@ -22,6 +22,7 @@ export function makePedMesh(G, isGang = false) {
   const cv = document.createElement('canvas'); cv.width = 32; cv.height = 40;
   const cx = cv.getContext('2d'); cx.fillStyle = '#ffe23f'; cx.font = 'bold 34px sans-serif'; cx.textAlign = 'center'; cx.fillText('!', 16, 32);
   bang.material.map = new THREE.CanvasTexture(cv); bang.material.needsUpdate = true;
+  bang.visible = false; // transparent until a ped flees; skip its draw call till then
   return { group: g, bang, legs };
 }
 
@@ -60,6 +61,7 @@ export function updatePeds(G, dt) {
     const fastCar = G.player.car && Math.abs(G.player.car.speed) > 9 && dist2d(p.x, p.z, px, pz) < 8 && !isSidewalkSafe(p.x, p.z);
     if (danger || fastCar) ped.fleeT = Math.max(ped.fleeT, 1.6);
     ped.bang.material.opacity = ped.fleeT > 0 ? 1 : Math.max(0, ped.bang.material.opacity - dt * 3);
+    ped.bang.visible = ped.bang.material.opacity > 0.02;
     ped.bang.lookAt(G.camera.position.x, 2.1, G.camera.position.z);
     if (ped.gang) continue; // gang members are driven by combat.js
     if (ped.fleeT > 0) {

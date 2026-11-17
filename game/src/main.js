@@ -17,7 +17,11 @@ import { parseShot, stageScene } from './shots.js';
 const shot = parseShot();
 const canvas = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// Fill cost scales with pixel count and this scene is only ~5k triangles, so
+// the pixel ratio is the lever that matters: cap at 1.5 (not 2), and let the
+// adaptive monitor in the frame loop step it down further on slow hardware.
+const BASE_PIXEL_RATIO = Math.min(devicePixelRatio, 1.5);
+renderer.setPixelRatio(BASE_PIXEL_RATIO);
 renderer.setSize(innerWidth, innerHeight);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xffb37a);
@@ -39,6 +43,11 @@ const G = {
 G.rankName = () => rankFor(G.completed);
 G.damagePlayer = (n) => damagePlayer(G, n);
 window.__game = G; // debug/playtest handle; harmless in normal play
+// Adaptive quality state, driven by the frame loop below. Levels are fixed
+// multipliers on BASE_PIXEL_RATIO; the monitor only ever steps DOWN.
+const quality = { level: 0, lastAvgMs: 0, accMs: 0, frames: 0 };
+const QUALITY_FACTORS = [1, 0.75, 0.5];
+G.quality = quality;
 G.input = new Input(canvas, () => togglePause());
 G.hud = new Hud(G);
 initPolice(G); initCombat(G);
@@ -181,7 +190,23 @@ if (shot) {
 let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const rawMs = now - last;
+  const dt = Math.min(0.05, rawMs / 1000); last = now;
+  // Adaptive quality insurance for unknown hardware: average the raw frame
+  // time over a ~2 s window; if it stays above 24 ms, step the pixel ratio
+  // down one fixed notch (1x -> 0.75x -> 0.5x of base). Deterministic: fixed
+  // window, threshold and steps — and it never steps back up mid-session.
+  if (G.state !== 'paused') {
+    quality.accMs += rawMs; quality.frames++;
+    if (quality.accMs >= 2000) {
+      quality.lastAvgMs = quality.accMs / quality.frames;
+      if (quality.lastAvgMs > 24 && quality.level < QUALITY_FACTORS.length - 1) {
+        quality.level++;
+        renderer.setPixelRatio(Math.max(0.5, BASE_PIXEL_RATIO * QUALITY_FACTORS[quality.level]));
+      }
+      quality.accMs = 0; quality.frames = 0;
+    }
+  }
   if (G.state === 'paused') { renderer.render(scene, camera); return; }
   G.time += dt;
   G.shake = Math.max(0, G.shake - dt * 1.4);

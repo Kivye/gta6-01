@@ -53,8 +53,11 @@ try {
   }
   await page.keyboard.up('w');
   check('walks with WASD', walked > 3, `moved ${walked.toFixed(1)}m from ${JSON.stringify(p0)}`);
-  // Teleport next to a traffic car and steal it with E.
-  await ev(() => { const G = window.__game; const car = G.cars.find((c) => c.kind === 'traffic'); G.player.x = car.mesh.position.x + 2; G.player.z = car.mesh.position.z; G.player.mesh.position.set(G.player.x, 0, G.player.z); });
+  // Teleport next to a traffic car and steal it with E. The target's speed is
+  // zeroed for the staging: at full frame rate the car otherwise drives out
+  // of the 3.4m interaction radius during the fixed 300ms wait (it only
+  // stayed in range when software rendering slowed game time ~4x).
+  await ev(() => { const G = window.__game; const car = G.cars.find((c) => c.kind === 'traffic'); car.speed = 0; G.player.x = car.mesh.position.x + 2; G.player.z = car.mesh.position.z; G.player.mesh.position.set(G.player.x, 0, G.player.z); });
   await page.waitForTimeout(300);
   await page.keyboard.press('e');
   await page.waitForTimeout(400);
@@ -118,7 +121,7 @@ try {
   await ev(() => localStorage.clear());
   await page.click('#btn-start');
   await page.waitForTimeout(500);
-  await ev(() => { const G = window.__game; const car = G.cars.find((c) => c.kind === 'traffic'); G.player.x = car.mesh.position.x + 2; G.player.z = car.mesh.position.z; G.player.mesh.position.set(G.player.x, 0, G.player.z); });
+  await ev(() => { const G = window.__game; const car = G.cars.find((c) => c.kind === 'traffic'); car.speed = 0; G.player.x = car.mesh.position.x + 2; G.player.z = car.mesh.position.z; G.player.mesh.position.set(G.player.x, 0, G.player.z); });
   await page.waitForTimeout(250);
   await page.keyboard.press('e');
   await page.waitForTimeout(300);

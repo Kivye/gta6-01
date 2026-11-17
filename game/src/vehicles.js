@@ -58,7 +58,7 @@ export function makeCarMesh(model, rng) {
   brake.position.set(0, 0.62, -model.len / 2 - 0.03); g.add(brake);
   const smoke = new THREE.Mesh(new THREE.SphereGeometry(0.5, 7, 6),
     new THREE.MeshBasicMaterial({ color: 0x555555, transparent: true, opacity: 0 }));
-  smoke.position.set(0, 1.3, model.len * 0.35); g.add(smoke);
+  smoke.position.set(0, 1.3, model.len * 0.35); smoke.visible = false; g.add(smoke);
   return { group: g, wheels, brakeMat, lightBar, smoke };
 }
 
@@ -215,12 +215,14 @@ export function updateVehicles(G, dt) {
       car.lightBar.children[0].material.color.setHex(on ? 0xff6666 : 0x881111);
       car.lightBar.children[1].material.color.setHex(on ? 0x113388 : 0x6688ff);
     }
-    // Damage smoke puffs.
+    // Damage smoke puffs. A fully transparent mesh still costs a draw call,
+    // so the smoke puff only enters the render list when it is visible.
     if (car.health < 35 && car.health > 0) {
       car.smokeT += dt;
       car.smoke.material.opacity = 0.35 + 0.2 * Math.sin(car.smokeT * 9);
       const s = 0.7 + 0.3 * Math.sin(car.smokeT * 5); car.smoke.scale.set(s, s, s);
     } else if (!car.dead) car.smoke.material.opacity = Math.max(0, car.smoke.material.opacity - dt);
+    car.smoke.visible = car.smoke.material.opacity > 0.02;
     // Despawn distant traffic, keep the world populated near Rio.
     if (car.kind === 'traffic' && dist2d(p.x, p.z, G.player.x, G.player.z) > 150) removeCar(G, car);
   }

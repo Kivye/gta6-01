@@ -84,7 +84,10 @@ export class Hud {
     if (G.bustT > 0.2) prompt = '⚠ THE HEAT IS GRABBING YOU — MOVE!';
     if (prompt) { this.els.prompt.textContent = prompt; this.els.prompt.classList.remove('hidden'); }
     else this.els.prompt.classList.add('hidden');
-    this.drawMinimap();
+    // The minimap is a full 2D-canvas redraw; every second frame is plenty
+    // for a navigation aid and halves that cost.
+    this.mmTick = (this.mmTick || 0) + 1;
+    if (this.mmTick % 2 === 0) this.drawMinimap();
   }
   drawMinimap() {
     const ctx = this.mm, G = this.G, P = G.player;
