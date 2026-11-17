@@ -1,79 +1,75 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// Deterministic staging for screenshots: ?shot=<scene>&seed=1 sets a composed scene
+// with a fixed camera and frozen HUD state. Normal play never calls this.
+import { CHOP_SHOPS } from './config.js';
+import { createCar } from './vehicles.js';
+import { spawnPed } from './pedestrians.js';
+import { setWanted } from './police.js';
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
-
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
-    }
-  }
-  return Infinity;
+export function parseShot() {
+  const q = new URLSearchParams(location.search);
+  const shot = q.get('shot');
+  if (!shot) return null;
+  return { scene: shot, seed: parseInt(q.get('seed') || '1', 10) || 1 };
 }
-
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
-  }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
-    }
-  }
-  return best;
+function park(G, model, x, z, angle, kind = 'traffic') {
+  const car = createCar(G, model, x, z, angle, kind);
+  car.speed = 0;
+  return car;
 }
-
-/**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
- */
-export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
+export function stageScene(G, scene) {
+  const P = G.player;
+  G.shotMode = scene;
+  if (scene === 'cover') {
+    // Police chase on a Marina boulevard: Rio's sports car fleeing, two cruisers behind.
+    P.x = 2; P.z = 84; P.angle = 0;
+    const hero = park(G, 'sports', 2, 84, 0, 'player');
+    hero.stolen = true; hero.speed = 16;
+    P.car = hero; P.mesh.visible = false;
+    park(G, 'police', -2.5, 73, 0.1, 'police').speed = 15;
+    park(G, 'police', 4.5, 67, -0.08, 'police').speed = 15;
+    park(G, 'taxi', -24, 96, Math.PI / 2); park(G, 'sedan', 26, 70, -Math.PI / 2);
+    for (let i = 0; i < 6; i++) spawnPed(G, -6 + i * 2.4, 96 + (i % 3));
+    setWanted(G, 3);
+    G.cash = 2450; G.completed = 2;
+    G.missions.idx = 2; G.missions.stage = 0; G.missions.active = true;
+    G.hud.setObjective('Stop the rival car (ram it or shoot it), then grab the briefcase.', { x: 30, z: 40 });
+    P.camYaw = Math.PI; P.camPitch = 0.3;
+    G.camera.position.set(2.5, 6, 54); G.camera.lookAt(0, 1.3, 84);
+  } else if (scene === 'onfoot') {
+    P.x = -22; P.z = 6; P.angle = 2.6; P.mesh.position.set(P.x, 0, P.z); P.mesh.rotation.y = P.angle;
+    park(G, 'taxi', -26, 12, 0); park(G, 'sedan', -20, -14, Math.PI); park(G, 'compact', -6, 2, Math.PI / 2);
+    for (let i = 0; i < 8; i++) spawnPed(G, -30 + i * 2.6, 8.5 - (i % 2) * 1.4);
+    G.cash = 890; G.completed = 1;
+    G.missions.idx = 1; G.missions.stage = 0; G.missions.active = true;
+    G.hud.setObjective('Pick up the package in the Marina.', { x: 28, z: 80 });
+    G.nearCar = G.cars[0];
+    P.camYaw = 2.4; P.camPitch = 0.3;
+    G.camera.position.set(-30, 3.4, 16); G.camera.lookAt(-18, 1.2, 0);
+  } else if (scene === 'drive') {
+    P.x = 54; P.z = -30; P.angle = Math.PI / 2;
+    const hero = park(G, 'convertible', 54, -30, Math.PI / 2, 'player');
+    hero.speed = 31; P.car = hero; P.mesh.visible = false;
+    park(G, 'suv', 78, -36, Math.PI / 2); park(G, 'limo', 30, -24, -Math.PI / 2);
+    for (let i = 0; i < 4; i++) spawnPed(G, 46 + i * 3, -21);
+    G.cash = 1730; G.completed = 3;
+    G.missions.idx = 3; G.missions.stage = 0; G.missions.active = true;
+    G.hud.setObjective('Steal the Vesper GT from the Heights showroom.', { x: 54, z: -50 });
+    G.hud.showVehicle(hero);
+    P.camYaw = Math.PI / 2 + Math.PI; P.camPitch = 0.26;
+    G.camera.position.set(34, 5, -31); G.camera.lookAt(62, 1.5, -28);
+  } else if (scene === 'mission') {
+    const shop = CHOP_SHOPS[0];
+    P.x = shop.x + 1; P.z = shop.z + 12; P.angle = Math.PI;
+    const hero = park(G, 'sedan', shop.x, shop.z + 8, Math.PI, 'player');
+    hero.stolen = true; hero.health = 82; P.car = hero; P.mesh.visible = false;
+    for (let i = 0; i < 3; i++) spawnPed(G, shop.x - 6 + i * 3, shop.z + 14);
+    G.cash = 1250; G.completed = 0;
+    G.missions.idx = 0; G.missions.stage = 1; G.missions.active = true;
+    G.hud.setObjective('Deliver the stolen car to a chop shop garage.', { x: shop.x, z: shop.z + 7 });
+    G.hud.banner('MISSION COMPLETE', 'First sale done. The fence remembers your face now.\n+$150 — Rank: Runner', 600);
+    P.camYaw = 0; P.camPitch = 0.3;
+    G.camera.position.set(shop.x - 11, 5, shop.z + 22); G.camera.lookAt(shop.x, 1.6, shop.z + 4);
   }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
-  }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+  G.hud.show();
+  G.hud.update(0.016);
 }

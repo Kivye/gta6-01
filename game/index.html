@@ -3,17 +3,51 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
-<style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-</style>
+<title>Palmshade Heat</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./style.css">
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<canvas id="view"></canvas>
+<div id="hud" class="hidden">
+  <div id="topbar">
+    <div id="stars"></div>
+    <div id="cash"></div>
+    <div id="rank"></div>
+  </div>
+  <div id="district"></div>
+  <div id="objective"></div>
+  <div id="healthwrap"><div id="healthbar"></div></div>
+  <div id="vehicleinfo" class="hidden"><div id="carname"></div><div id="speedo">0</div><div id="speedunit">km/h</div></div>
+  <div id="prompt" class="hidden"></div>
+  <div id="timer"></div>
+  <canvas id="minimap" width="180" height="180"></canvas>
+  <div id="crosshair" class="hidden">+</div>
+  <div id="muzzle"></div>
+  <div id="banner" class="hidden"></div>
+</div>
+<div id="overlay">
+  <div id="menu">
+    <h1 id="title">PALMSHADE<br><span>HEAT</span></h1>
+    <p id="tagline">Steal it. Fence it. Outrun the heat.</p>
+    <div id="menubtns">
+      <button id="btn-start">Start</button>
+      <button id="btn-continue">Continue</button>
+      <button id="btn-how">How to Play</button>
+      <button id="btn-reset">Reset Save</button>
+    </div>
+    <div id="howto" class="hidden">
+      <p><b>WASD</b> move &middot; <b>Mouse</b> orbit camera (click the game to lock) &middot; <b>Shift</b> run</p>
+      <p><b>E</b> steal / enter / exit car &middot; interact &middot; <b>F</b> fire pistol &middot; <b>M</b> mute &middot; <b>Esc / P</b> pause</p>
+      <p>Deliver stolen cars to a chop shop garage to earn cash. Follow the gold light column for story missions. Police raise your wanted stars for witnessed crimes; break line of sight to cool down. Death sends you to the hospital (-10% cash). Getting caught sends you to the station (-15% cash).</p>
+    </div>
+    <p id="menunote"></p>
+  </div>
+  <div id="bigtext" class="hidden"></div>
+  <div id="subtext" class="hidden"></div>
+  <button id="btn-resume" class="hidden">Resume</button>
+</div>
+<script src="./vendor/three.min.js"></script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

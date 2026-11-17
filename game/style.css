@@ -1,0 +1,41 @@
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#1a0f14;font-family:Verdana,Geneva,Tahoma,sans-serif;color:#fff}
+#view{position:fixed;inset:0;width:100%;height:100%;display:block}
+.hidden{display:none!important}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:5}
+#topbar{position:absolute;top:12px;right:16px;text-align:right}
+#stars{font-size:26px;letter-spacing:3px;color:#ffd23f;text-shadow:0 0 6px #000,1px 1px 0 #000;min-height:32px}
+#stars .off{color:rgba(255,255,255,.25)}
+#stars.blink{opacity:.35}
+#cash{font-size:22px;font-weight:bold;color:#7dff8a;text-shadow:1px 1px 0 #000}
+#rank{font-size:12px;color:#ffe9b0;text-shadow:1px 1px 0 #000}
+#district{position:absolute;top:14px;left:16px;font-size:20px;font-weight:bold;letter-spacing:2px;color:#fff;text-shadow:2px 2px 0 rgba(120,20,60,.8);text-transform:uppercase}
+#objective{position:absolute;top:110px;left:16px;max-width:340px;font-size:14px;line-height:1.45;background:rgba(10,10,20,.55);border-left:4px solid #ffd23f;padding:8px 10px;border-radius:4px}
+#objective:empty{display:none}
+#timer{position:absolute;top:64px;left:50%;transform:translateX(-50%);font-size:26px;font-weight:bold;color:#ffd23f;text-shadow:2px 2px 0 #000}
+#healthwrap{position:absolute;bottom:18px;left:16px;width:220px;height:16px;background:rgba(0,0,0,.55);border:2px solid #fff;border-radius:8px;overflow:hidden}
+#healthbar{height:100%;width:100%;background:linear-gradient(90deg,#e33,#f66)}
+#vehicleinfo{position:absolute;bottom:16px;right:16px;text-align:right}
+#carname{font-size:15px;font-style:italic;color:#ffe9b0;text-shadow:1px 1px 0 #000}
+#speedo{font-size:44px;font-weight:bold;line-height:1;text-shadow:2px 2px 0 #000}
+#speedunit{font-size:11px;color:#ddd}
+#prompt{position:absolute;bottom:120px;left:50%;transform:translateX(-50%);font-size:16px;background:rgba(0,0,0,.65);padding:8px 16px;border-radius:20px;border:1px solid #ffd23f}
+#minimap{position:absolute;bottom:44px;left:16px;width:180px;height:180px;border:2px solid rgba(255,255,255,.8);border-radius:8px;background:#223}
+#crosshair{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:26px;color:#fff;text-shadow:0 0 4px #000}
+#muzzle{position:absolute;top:50%;left:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:radial-gradient(circle,#fff8c0 0%,rgba(255,160,40,.0) 70%);opacity:0}
+#banner{position:absolute;top:26%;left:50%;transform:translateX(-50%);text-align:center;font-size:34px;font-weight:bold;letter-spacing:2px;color:#ffd23f;text-shadow:3px 3px 0 #7a1030;background:rgba(10,5,15,.55);padding:14px 30px;border-radius:8px;white-space:pre-line}
+#overlay{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(255,120,60,.18),rgba(20,5,25,.45) 70%)}
+#overlay.clear{background:transparent;pointer-events:none}
+#overlay.solid{background:rgba(8,4,14,.72)}
+#title{font-size:84px;line-height:.92;text-align:center;margin:0;font-weight:900;letter-spacing:2px;background:linear-gradient(180deg,#ffe259 10%,#ffa751 45%,#ff2e7e 90%);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none;filter:drop-shadow(4px 4px 0 rgba(40,0,30,.85))}
+#title span{font-size:96px}
+#tagline{text-align:center;font-style:italic;color:#ffe9b0;text-shadow:1px 1px 0 #000;margin:10px 0 22px}
+#menubtns{display:flex;flex-direction:column;gap:10px;align-items:center}
+#menubtns button,#btn-resume{pointer-events:auto;font-family:inherit;font-size:18px;font-weight:bold;letter-spacing:1px;color:#fff;background:linear-gradient(180deg,#ff5e8a,#c21847);border:2px solid #ffd23f;border-radius:24px;padding:10px 42px;cursor:pointer;min-width:260px}
+#menubtns button:hover,#btn-resume:hover{background:linear-gradient(180deg,#ff7ba2,#e0265c)}
+#howto{max-width:520px;background:rgba(8,6,16,.8);padding:12px 18px;border-radius:8px;font-size:13px;line-height:1.5;margin-top:16px}
+#menunote{text-align:center;color:#ffd23f;font-size:13px;min-height:18px;text-shadow:1px 1px 0 #000}
+#bigtext{font-size:92px;font-weight:900;letter-spacing:8px;color:#e33;text-shadow:4px 4px 0 #000}
+#bigtext.busted{color:#7db4ff}
+#subtext{font-size:18px;color:#fff;text-shadow:1px 1px 0 #000;margin-top:8px}
+#btn-resume{margin-top:22px}
