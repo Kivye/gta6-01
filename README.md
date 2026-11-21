@@ -4,70 +4,84 @@
 
 # PALMSHADE HEAT
 
-Palmshade is a sun-bleached coastal city that never quite sleeps, and you are
-the nobody who intends to own it. PALMSHADE HEAT is a tiny open-world crime
-game that runs entirely in the browser: it is built on Three.js, every sound
-is synthesized live with procedural Web Audio, and there is no build step and
-not a single external asset to download. Open the page, press START ENGINE,
-and the city is yours to take.
+Selamat datang di Palmshade, kota pantai tempat ambisi diukur dari seberapa
+berani kamu melanggar aturan. **PALMSHADE HEAT** adalah game kriminal
+dunia-terbuka berukuran kecil yang hidup sepenuhnya di dalam browser. Mesin
+grafisnya memakai Three.js, seluruh suaranya dibangkitkan langsung lewat
+audio prosedural Web Audio, dan proyek ini tidak butuh langkah build sama
+sekali — tidak ada aset eksternal yang harus diunduh. Jalankan servernya,
+buka halamannya, tekan **START ENGINE**, dan kota ini siap diperebutkan.
 
-## The city
+## Jelajahi tiga distrik
 
-Three districts, three tempers. The Marina glitters with money and moored
-yachts, Old Town keeps its secrets behind narrow streets, and The Heights is
-where the deals that matter get signed. Traffic flows, pedestrians wander,
-and everything reacts when you start making noise.
+Palmshade terbagi menjadi tiga kawasan yang masing-masing punya wajah
+sendiri:
 
-## What you do in Palmshade
+- **Marina** — dermaga, kapal pesiar, dan uang yang beredar cepat.
+- **Old Town** — gang-gang sempit dan urusan lama yang belum selesai.
+- **The Heights** — lingkungan elite tempat kesepakatan besar diputuskan.
 
-- **Eight story missions** carry you from petty errands to the job that makes
-  your name, ending with a shot at the Palmshade Legend title.
-- **Three street races** with real money on the line: stake your cash, beat
-  named rivals who fight back, and collect double when you win.
-- **Eight stunt ramps** scattered across the districts reward hang time and
-  nerve with bonus cash and respect.
-- **Three income properties** — a pier club, an auto yard, a penthouse — can
-  be bought outright and then pay you rent while you work.
-- **A respray garage** repaints your ride, cools the heat when nobody is
-  watching, and stores one favourite car for you to call back.
-- **The Gun Van** rolls through the city as a mobile armoury, selling heavier
-  hardware, refills, and kevlar to anyone with the cash.
+Jalanannya tidak pernah sepi: mobil lalu-lalang dan pejalan kaki berlalu
+di trotoar, dan semuanya ikut bereaksi begitu kamu mulai berulah.
 
-## Arsenal and the law
+## Isi permainan
 
-You carry three weapon slots with honest ammunition counts: a Pistol that
-never runs dry, a Micro SMG for drive-by work, and a Pump Shotgun that hits
-hard up close and fades with distance. Spend loudly and the Palmshade police
-answer in kind. The five-star wanted system escalates from patrol cars to the
-AIR-1 helicopter's spotlight, roadblocks, the black SWAT-1 armoured van, and
-spike strips that can shred a tyre and halve your top speed until you get it
-fixed. Your crew is not decoration either — call on their abilities when a
-job turns ugly.
+- **Delapan misi cerita** yang mengantar kamu dari pekerjaan remeh menuju
+  reputasi yang diperhitungkan di seluruh kota.
+- **Tiga balapan jalanan** dengan taruhan uang sungguhan — pasang taruhanmu,
+  kalahkan rival yang punya nama dan gaya menyetir sendiri, lalu kantongi
+  kemenangannya.
+- **Delapan tanjakan stunt** yang tersebar di berbagai sudut kota untuk
+  diuji lompatannya.
+- **Tiga properti berpenghasilan** yang bisa dibeli dan sesudahnya membayar
+  pemasukan berkala ke kantongmu.
+- **Garasi respray** untuk mengganti warna mobil, sekaligus tempat menyimpan
+  satu mobil favorit agar selalu bisa dipanggil kembali.
+- **Gun Van**, toko senjata keliling yang berkeliling kota dan menjual
+  perlengkapan yang lebih berat dari yang kamu bawa di awal.
 
-## Mood and memory
+## Senjata dan buronan
 
-Flip on the Neon Night preset and light coastal rain and the whole city
-changes character. Your career is remembered: story progress, respect,
-races won, stunt jumps, properties owned, and total earnings are tracked in
-the pause screen, and your progress is kept in a local save so the climb
-from Nobody to Palmshade Legend survives a closed tab.
+Kamu membawa tiga slot senjata, dan masing-masing menghitung amunisinya
+dengan jujur: **Pistol** dengan peluru tak terbatas untuk situasi apa pun,
+**Micro SMG** untuk urusan cepat, dan **Pump Shotgun** untuk jarak dekat
+yang menyakitkan. Semakin besar kekacauan yang kamu buat, semakin serius
+tanggapan kepolisian Palmshade. Sistem wanted lima bintang menaikkan
+tekanan bertahap: mobil patroli datang lebih dulu, lalu helikopter **AIR-1**
+menyapu jalanan dengan sorot lampunya, disusul roadblock, van lapis baja
+**SWAT-1**, dan spike strip yang sanggup mengempiskan ban mobilmu di
+tengah pelarian. Untungnya kamu tidak bekerja sendirian — kru kamu punya
+kemampuan yang bisa dipanggil saat keadaan memburuk.
 
-## How to play
+Suasana kota pun bisa berubah total: aktifkan preset **Neon Night** dan
+hujan ringan khas pesisir, dan Palmshade terasa seperti kota yang berbeda.
 
-Serve the game with the bundled server on port 8080, or with any static file
-server you like, then open it and press **START ENGINE**.
+## Progres yang tersimpan
 
-- **WASD** — move
-- **E** — enter or exit a car
-- **Mouse or Space** — shoot
-- **Shift** — nitro in a car, sprint on foot
-- **T** — start a street race
-- **B** — buy a property
-- **P** — pause and career statistics
+Perjalanan kariermu dicatat rapi sebagai statistik — misi yang tuntas,
+balapan yang dimenangkan, lompatan stunt, properti yang dimiliki, dan uang
+yang sudah dihasilkan. Semua progres itu disimpan secara lokal, jadi kamu
+bisa menutup permainan dan melanjutkannya lagi nanti dari titik terakhir.
 
-## Project checks
+## Cara bermain
 
-The project ships with its own verification tooling: a headless playtest
-suite of 93 checks that plays the game end to end and reports pass or fail,
-and a screenshot tool that renders the four showcase images of the city in
-action.
+Jalankan game ini lewat server bawaan pada port 8080, atau pakai server
+file statis apa pun yang kamu sukai, kemudian buka di browser dan tekan
+**START ENGINE**.
+
+| Tombol | Fungsi |
+| --- | --- |
+| WASD | Bergerak |
+| E | Masuk atau keluar mobil |
+| Mouse / Space | Menembak |
+| Shift | Nitro saat menyetir, sprint saat berjalan kaki |
+| T | Memulai balapan jalanan |
+| B | Membeli properti |
+| P | Jeda dan melihat statistik |
+
+## Pemeriksaan proyek
+
+Repo ini dilengkapi perangkat verifikasinya sendiri: sebuah rangkaian
+playtest headless berisi **93 pemeriksaan** yang memainkan game dari awal
+sampai akhir dan melaporkan hasilnya, ditambah perkakas render yang
+menghasilkan empat screenshot resmi permainan.
