@@ -1,5 +1,7 @@
-// Rio: on-foot movement, third-person camera, entering and leaving cars.
-import { TUNING, CITY_EDGE } from './config.js';
+// Rio: on-foot movement, the third-person camera, entering and leaving
+// cars, the theft bookkeeping (stat, standing, dispatch event) and the
+// kevlar vest pickup outside the station.
+import { TUNING, CITY_EDGE, districtAt } from './config.js';
 import { clamp, dist2d, angleLerp } from './random.js';
 import { insideBuilding } from './world.js';
 import { drivePlayerCar } from './vehicles.js';
@@ -11,7 +13,7 @@ export function createPlayer(G) {
   parts.group.children[0].material = new THREE.MeshLambertMaterial({ color: 0xff7a1a });
   G.scene.add(parts.group);
   G.player = {
-    mesh: parts.group, x: 2, z: 100, angle: Math.PI, health: TUNING.playerHealth,
+    mesh: parts.group, x: 2, z: 100, angle: Math.PI, health: TUNING.playerHealth, armour: 0,
     car: null, camYaw: Math.PI, camPitch: 0.32, dead: false, walkPhase: 0,
   };
   parts.group.position.set(G.player.x, 0, G.player.z);
@@ -39,7 +41,16 @@ export function enterCar(G, car) {
   car.hadDriver = false;
   if (!car.stolen && car.model.id !== 'police') {
     car.stolen = true;
+    G.stats.stolen++;
     G.crime('theft', car.mesh.position.x, car.mesh.position.z);
+    // A theft a cruiser can see costs standing where the car stood.
+    const witnessed = G.cars.some((c) => c.model.id === 'police' &&
+      dist2d(car.mesh.position.x, car.mesh.position.z, c.mesh.position.x, c.mesh.position.z) < 70);
+    if (witnessed) {
+      const d = districtAt(car.mesh.position.x, car.mesh.position.z);
+      G.standing[d] = clamp(G.standing[d] - 2, 0, 100);
+    }
+    G.hud.showEvent('VEHICLE STOLEN', car.model.name);
     G.missions?.onCarStolen(car);
   }
   G.hud.showVehicle(car);
@@ -62,7 +73,7 @@ export function exitCar(G) {
 }
 export function updatePlayer(G, dt) {
   const P = G.player, inp = G.input;
-  // Camera orbit from mouse, plus a gentle ease behind movement.
+  // Camera orbit from the mouse, plus a gentle ease behind movement.
   if (inp.locked) {
     P.camYaw -= inp.mouseDX * 0.0032;
     P.camPitch = clamp(P.camPitch + inp.mouseDY * 0.0024, 0.06, 1.1);
@@ -84,7 +95,7 @@ export function updatePlayer(G, dt) {
   const running = inp.down('ShiftLeft') || inp.down('ShiftRight');
   const speed = running ? TUNING.runSpeed : TUNING.playerSpeed;
   if (mv.x !== 0 || mv.z !== 0) {
-    // WASD is camera-relative: W walks away from the camera, D to its right.
+    // WASD is camera-relative: W walks away from the camera, D right.
     const worldAngle = P.camYaw + Math.atan2(mv.x, mv.z) + Math.PI;
     const nx = P.x + Math.sin(worldAngle) * speed * dt;
     const nz = P.z + Math.cos(worldAngle) * speed * dt;
@@ -99,6 +110,19 @@ export function updatePlayer(G, dt) {
   P.mesh.position.set(P.x, Math.abs(Math.sin(P.walkPhase)) * 0.05, P.z);
   P.mesh.rotation.y = P.angle;
   placeCamera(G, 7.2, 2.6);
+  // The kevlar vest outside the station: walk into it on foot and the
+  // armour tops up; the prop hides until its restock minute passes.
+  if (G.vestMesh) {
+    const ready = G.time >= (G.vestReadyAt || 0);
+    G.vestMesh.visible = ready;
+    if (ready && dist2d(P.x, P.z, G.vestMesh.position.x, G.vestMesh.position.z) < 2.4) {
+      P.armour = 100;
+      G.vestReadyAt = G.time + 60;
+      G.vestMesh.visible = false;
+      G.hud.showEvent('KEVLAR VEST', 'Armour topped up to 100.');
+      G.audio.blip(520, 0.12, 'triangle', 0.1);
+    }
+  }
   // Context interaction: steal / enter the nearest car.
   const car = nearestCar(G, 3.4);
   G.nearCar = car;

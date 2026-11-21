@@ -14,11 +14,48 @@
     <div id="stars"></div>
     <div id="cash"></div>
     <div id="rank"></div>
+    <div id="storyline"></div>
+    <div id="progresswrap"><div id="progressbar"></div></div>
+    <div id="playclock"></div>
   </div>
   <div id="district"></div>
-  <div id="objective"></div>
+  <div id="standing"></div>
+  <div id="missionpanel" class="hidden">
+    <div id="missionhead"></div>
+    <div id="missionpips"></div>
+    <div id="missionobj"></div>
+    <div id="missionnext"></div>
+  </div>
+  <div id="dispatchpanel" class="hidden">
+    <div id="dispatchhead"></div>
+    <div id="dispatchrows"></div>
+    <div id="dispatchincident"></div>
+  </div>
+  <div id="radiobar"></div>
+  <div id="nmtoast" class="hidden"></div>
+  <div id="eventbanner" class="hidden"></div>
+  <div id="sightchip" class="hidden">IN SIGHT</div>
+  <div id="crewpanel"></div>
+  <div id="fencepanel" class="hidden"></div>
+  <div id="dialogbox" class="hidden">
+    <div id="dialogportrait"></div>
+    <div id="dialogbody"><div id="dialogname"></div><div id="dialogline"></div></div>
+  </div>
+  <div id="armourlabel">ARMOUR</div>
+  <div id="armourwrap"><div id="armourbar"></div></div>
   <div id="healthwrap"><div id="healthbar"></div></div>
-  <div id="vehicleinfo" class="hidden"><div id="carname"></div><div id="speedo">0</div><div id="speedunit">km/h</div></div>
+  <div id="vehicleinfo" class="hidden">
+    <div id="carname"></div>
+    <div id="condwrap"><div id="condbar"></div></div>
+    <div id="speedo">0</div><div id="speedunit">km/h</div>
+    <div id="gear">GEAR N</div>
+  </div>
+  <div id="weaponstrip">
+    <div class="wslot active" id="wslot1">1 · PISTOL · ∞ · READY</div>
+    <div class="wslot" id="wslot2">2 · — EMPTY</div>
+    <div class="wslot" id="wslot3">3 · — EMPTY</div>
+  </div>
+  <div id="statspanel" class="hidden"></div>
   <div id="prompt" class="hidden"></div>
   <div id="timer"></div>
   <canvas id="minimap" width="180" height="180"></canvas>
@@ -38,7 +75,9 @@
     </div>
     <div id="howto" class="hidden">
       <p><b>WASD</b> move &middot; <b>Mouse</b> orbit camera (click the game to lock) &middot; <b>Shift</b> run</p>
-      <p><b>E</b> steal / enter / exit car &middot; interact &middot; <b>F</b> fire pistol &middot; <b>M</b> mute &middot; <b>Esc / P</b> pause</p>
+      <p><b>E</b> steal / enter / exit car &middot; <b>F</b> fire pistol &middot; <b>R</b> change radio station &middot; <b>M</b> mute &middot; <b>Esc / P</b> pause</p>
+      <p><b>Z / X / C</b> call your crew: Nia swaps plates (-1 star), Bo quick-fixes your car, Juno watches the cruisers on the minimap. Abilities cool down after each use.</p>
+      <p>The blue bar is armour: a kevlar vest on a crate outside the police station tops it up, and it soaks damage before your health does. District standing under the district name rises when you finish jobs and fence cars there — and falls when the heat watches you steal.</p>
       <p>Deliver stolen cars to a chop shop garage to earn cash. Follow the gold light column for story missions. Police raise your wanted stars for witnessed crimes; break line of sight to cool down. Death sends you to the hospital (-10% cash). Getting caught sends you to the station (-15% cash).</p>
     </div>
     <p id="menunote"></p>

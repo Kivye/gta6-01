@@ -1,4 +1,6 @@
-// Pedestrians: low-poly figures strolling the sidewalks, fleeing danger with a "!" marker.
+// Pedestrians: low-poly figures who stroll the sidewalk bands, scatter
+// with a floating "!" when danger lands near them, and — for the gang
+// subset — stand their ground and let combat.js drive their gunfire.
 import { WORLD, CITY_EDGE } from './config.js';
 import { rngPick, clamp, dist2d } from './random.js';
 import { snapToRoad, insideBuilding } from './world.js';
@@ -44,7 +46,8 @@ export function removePed(G, ped) {
   const i = G.peds.indexOf(ped); if (i >= 0) G.peds.splice(i, 1);
 }
 function sidewalkTarget(G, ped) {
-  // Pick a point along a sidewalk band: along one road, offset to the pavement.
+  // A stroll target on a pavement band: along one road centreline,
+  // offset sideways by a little more than the road's half width.
   const horiz = G.rng() < 0.5;
   const c = snapToRoad((G.rng() * 2 - 1) * CITY_EDGE);
   const side = (G.rng() < 0.5 ? -1 : 1) * (WORLD.roadHalf + 1.1 + G.rng() * 0.7);

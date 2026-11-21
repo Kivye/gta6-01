@@ -2,28 +2,94 @@
 html,body{margin:0;height:100%;overflow:hidden;background:#1a0f14;font-family:Verdana,Geneva,Tahoma,sans-serif;color:#fff}
 #view{position:fixed;inset:0;width:100%;height:100%;display:block}
 .hidden{display:none!important}
-#hud{position:fixed;inset:0;pointer-events:none;z-index:5}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:5;font-family:'Courier New',monospace}
+/* --- top right: stars, cash, respect, story progress, play clock --- */
 #topbar{position:absolute;top:12px;right:16px;text-align:right}
 #stars{font-size:26px;letter-spacing:3px;color:#ffd23f;text-shadow:0 0 6px #000,1px 1px 0 #000;min-height:32px}
 #stars .off{color:rgba(255,255,255,.25)}
 #stars.blink{opacity:.35}
 #cash{font-size:22px;font-weight:bold;color:#7dff8a;text-shadow:1px 1px 0 #000}
 #rank{font-size:12px;color:#ffe9b0;text-shadow:1px 1px 0 #000}
+#storyline{font-size:11.5px;color:#ffd9e8;text-shadow:1px 1px 0 #000;margin-top:3px}
+#progresswrap{width:170px;height:7px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.6);border-radius:4px;margin:3px 0 2px auto;overflow:hidden}
+#progressbar{height:100%;width:0;background:linear-gradient(90deg,#ff2e7e,#ffb020)}
+#playclock{font-size:11px;color:#bfefff;text-shadow:1px 1px 0 #000}
+/* --- top left: district, standing, mission + dispatch panels --- */
 #district{position:absolute;top:14px;left:16px;font-size:20px;font-weight:bold;letter-spacing:2px;color:#fff;text-shadow:2px 2px 0 rgba(120,20,60,.8);text-transform:uppercase}
-#objective{position:absolute;top:110px;left:16px;max-width:340px;font-size:14px;line-height:1.45;background:rgba(10,10,20,.55);border-left:4px solid #ffd23f;padding:8px 10px;border-radius:4px}
-#objective:empty{display:none}
+#standing{position:absolute;top:44px;left:16px;color:#ffe9b0;font-size:12px;font-weight:bold;letter-spacing:1.5px;text-shadow:1px 1px 0 #000}
+.standbar{display:inline-block;width:70px;height:6px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.5);border-radius:3px;vertical-align:middle;margin-left:5px;overflow:hidden}
+.standbar i{display:block;height:100%;background:#ffd23f}
+#missionpanel{position:absolute;top:64px;left:16px;width:330px;background:rgba(8,8,18,.62);border-left:4px solid #ffd23f;padding:8px 11px;border-radius:4px;font-size:12.5px;line-height:1.5}
+#missionhead{color:#ffd23f;font-weight:bold;letter-spacing:.5px}
+#missionpips{color:#ffd23f;letter-spacing:2px;font-size:11px}
+#missionpips .off{color:rgba(255,255,255,.3)}
+#missionobj{color:#fff}
+#missionnext{color:#7dff8a;font-size:11.5px}
+#dispatchpanel{position:absolute;top:208px;left:16px;width:330px;background:rgba(8,10,24,.62);border-left:4px solid #3a6fd8;padding:8px 11px;border-radius:4px;font-size:12px;line-height:1.55}
+#dispatchhead{color:#9fc2ff;font-weight:bold;letter-spacing:.5px}
+.drow{display:flex;gap:8px;color:#dbe8ff}
+.drow b{color:#fff;min-width:58px}
+.drow span{flex:1;letter-spacing:1px}
+.drow i{font-style:normal;color:#ffe9b0}
+.drow.more{color:#9fc2ff}
+#dispatchincident{color:#ffb0a0;font-size:11.5px;border-top:1px solid rgba(255,255,255,.18);margin-top:3px;padding-top:3px}
+#dispatchincident:empty{display:none}
+/* --- top centre: mission timer, radio, toasts, event banner --- */
 #timer{position:absolute;top:64px;left:50%;transform:translateX(-50%);font-size:26px;font-weight:bold;color:#ffd23f;text-shadow:2px 2px 0 #000}
-#healthwrap{position:absolute;bottom:18px;left:16px;width:220px;height:16px;background:rgba(0,0,0,.55);border:2px solid #fff;border-radius:8px;overflow:hidden}
-#healthbar{height:100%;width:100%;background:linear-gradient(90deg,#e33,#f66)}
-#vehicleinfo{position:absolute;bottom:16px;right:16px;text-align:right}
+#radiobar{position:absolute;top:104px;left:50%;transform:translateX(-50%);font-size:12.5px;font-weight:bold;letter-spacing:1px;color:#b0ffd9;background:rgba(8,8,18,.5);padding:4px 14px;border-radius:12px;text-shadow:1px 1px 0 #000;white-space:nowrap}
+#nmtoast{position:absolute;top:134px;left:50%;transform:translateX(-50%);z-index:6;padding:5px 16px;border-radius:12px;background:rgba(10,12,24,.82);border:1px solid #ffd23f;color:#ffd23f;font-weight:800;font-size:13px;letter-spacing:1.5px;white-space:nowrap}
+#eventbanner{position:absolute;top:176px;left:50%;transform:translateX(-50%);font-size:17px;font-weight:bold;letter-spacing:2px;color:#fff;background:rgba(140,10,40,.78);padding:7px 22px;border-radius:6px;border:2px solid #ffd23f;text-shadow:2px 2px 0 #000;white-space:pre-line;text-align:center}
+/* --- right column: sight chip, crew cards, fence quote --- */
+#sightchip{position:absolute;top:106px;right:16px;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:bold;letter-spacing:1.5px;color:#fff}
+#sightchip.seen{background:rgba(200,20,40,.85)}
+#sightchip.losing{background:rgba(220,130,10,.85)}
+#crewpanel{position:absolute;top:140px;right:16px;width:248px;display:flex;flex-direction:column;gap:6px}
+.crewcard{display:flex;align-items:center;gap:8px;background:rgba(8,8,18,.62);border-radius:6px;padding:5px 8px;border-left:4px solid #ffd23f}
+.crewcard .portrait{width:34px;height:34px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;color:#fff;text-shadow:1px 1px 0 #000;flex:none}
+.crewbody{flex:1;min-width:0}
+.crewname{font-size:12px;font-weight:bold;letter-spacing:.5px}
+.crewmember{font-size:10.5px;color:#ffe9b0}
+.crewstate{font-size:11px;color:#bbb;font-weight:bold}
+.crewstate.ready{color:#7dff8a}
+.crewkey{flex:none;width:20px;height:20px;border:1px solid #ffd23f;border-radius:4px;color:#ffd23f;font-size:11px;font-weight:bold;display:flex;align-items:center;justify-content:center}
+#fencepanel{position:absolute;top:352px;right:16px;width:260px;background:rgba(8,18,10,.66);border-left:4px solid #7dff8a;padding:8px 11px;border-radius:4px;font-size:12.5px;line-height:1.55}
+.fencehead{color:#ffe9b0;font-weight:bold}
+.fencevalue{color:#7dff8a;font-weight:bold;font-size:14px}
+/* --- bottom right: dialogue, vehicle panel --- */
+#dialogbox{position:absolute;bottom:118px;right:16px;width:330px;display:flex;gap:10px;background:rgba(8,8,18,.66);padding:9px 11px;border-radius:6px}
+#dialogportrait{width:44px;height:44px;flex:none;border-radius:5px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:16px;color:#fff;text-shadow:1px 1px 0 #000}
+#dialogname{font-size:11.5px;font-weight:bold;color:#ffd9e8;letter-spacing:.5px}
+#dialogline{font-size:12.5px;font-style:italic;line-height:1.45}
+#vehicleinfo{position:absolute;bottom:16px;right:16px;text-align:right;padding:4px 8px;border-radius:8px}
+#vehicleinfo.flash{box-shadow:0 0 22px 4px rgba(255,210,63,.85)}
 #carname{font-size:15px;font-style:italic;color:#ffe9b0;text-shadow:1px 1px 0 #000}
+#condwrap{width:130px;height:7px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.6);border-radius:4px;margin:3px 0 2px auto;overflow:hidden}
+#condbar{height:100%;width:100%;background:#7dff8a}
 #speedo{font-size:44px;font-weight:bold;line-height:1;text-shadow:2px 2px 0 #000}
 #speedunit{font-size:11px;color:#ddd}
+#gear{font-size:11px;color:#ffe9b0;letter-spacing:1px}
+/* --- bottom left + centre: armour, health, minimap, weapons --- */
+#armourlabel{position:absolute;bottom:58px;left:16px;font-size:10px;letter-spacing:2px;color:#9fc2ff;text-shadow:1px 1px 0 #000}
+#armourwrap{position:absolute;bottom:42px;left:16px;width:220px;height:10px;background:rgba(0,0,0,.55);border:2px solid #9fc2ff;border-radius:6px;overflow:hidden}
+#armourbar{height:100%;width:0;background:linear-gradient(90deg,#3a6fd8,#7db4ff)}
+#healthwrap{position:absolute;bottom:18px;left:16px;width:220px;height:16px;background:rgba(0,0,0,.55);border:2px solid #fff;border-radius:8px;overflow:hidden}
+#healthbar{height:100%;width:100%;background:linear-gradient(90deg,#e33,#f66)}
+#minimap{position:absolute;bottom:70px;left:16px;width:180px;height:180px;border:2px solid rgba(255,255,255,.8);border-radius:50%;background:#223}
+#weaponstrip{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px}
+.wslot{font-size:11.5px;font-weight:bold;letter-spacing:1px;color:#bbb;background:rgba(8,8,18,.6);border:1px solid rgba(255,255,255,.35);border-radius:5px;padding:5px 12px}
+.wslot.active{color:#ffd23f;border-color:#ffd23f}
+/* --- pause career-stats panel --- */
+#statspanel{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:430px;max-height:86%;overflow:hidden;background:rgba(8,8,18,.88);border:2px solid #ffd23f;border-radius:8px;padding:14px 18px;font-size:13px;line-height:1.5}
+.statshead{color:#ffd23f;font-weight:bold;letter-spacing:1px;margin:8px 0 4px;border-bottom:1px solid rgba(255,210,63,.4);padding-bottom:3px}
+.statshead:first-child{margin-top:0}
+.statrow{display:flex;justify-content:space-between;color:#dbe8ff}
+.statrow b{color:#fff}
+/* --- prompts, crosshair, big banner --- */
 #prompt{position:absolute;bottom:120px;left:50%;transform:translateX(-50%);font-size:16px;background:rgba(0,0,0,.65);padding:8px 16px;border-radius:20px;border:1px solid #ffd23f}
-#minimap{position:absolute;bottom:44px;left:16px;width:180px;height:180px;border:2px solid rgba(255,255,255,.8);border-radius:8px;background:#223}
 #crosshair{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:26px;color:#fff;text-shadow:0 0 4px #000}
 #muzzle{position:absolute;top:50%;left:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:radial-gradient(circle,#fff8c0 0%,rgba(255,160,40,.0) 70%);opacity:0}
 #banner{position:absolute;top:26%;left:50%;transform:translateX(-50%);text-align:center;font-size:34px;font-weight:bold;letter-spacing:2px;color:#ffd23f;text-shadow:3px 3px 0 #7a1030;background:rgba(10,5,15,.55);padding:14px 30px;border-radius:8px;white-space:pre-line}
+/* --- overlay: menu, big text, resume --- */
 #overlay{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(255,120,60,.18),rgba(20,5,25,.45) 70%)}
 #overlay.clear{background:transparent;pointer-events:none}
 #overlay.solid{background:rgba(8,4,14,.72)}

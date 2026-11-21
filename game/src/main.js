@@ -1,30 +1,35 @@
-// Palmshade Heat — boot, screen state machine and the game loop.
-import { TUNING, HOSPITAL, STATION, rankFor } from './config.js';
+// Palmshade Heat — boot, the screen state machine and the game loop.
+// Owns the shared state object G: progression (cash, missions, respect,
+// standing, career stats), the pause screen with its career panel, the
+// crew/radio key bindings, and the respawn sweeps that keep a fresh run
+// from inheriting a dead run's timers.
+import { TUNING, HOSPITAL, STATION, respectRank } from './config.js';
 import { makeRng } from './random.js';
 import { Input } from './input.js';
 import { GameAudio } from './audio.js';
-import { loadSave, writeSave, clearSave, hasSave } from './save.js';
+import { loadSave, writeSave, clearSave, hasSave, freshStats, freshStanding } from './save.js';
 import { buildWorld } from './world.js';
 import { spawnTraffic, updateVehicles } from './vehicles.js';
 import { updatePeds, spawnPed } from './pedestrians.js';
 import { createPlayer, updatePlayer, exitCar } from './player.js';
-import { initPolice, updatePolice, setWanted, policeCars } from './police.js';
+import { initPolice, updatePolice, setWanted, policeCars, updateHeli } from './police.js';
 import { initCombat, updateCombat, damagePlayer } from './combat.js';
 import { Missions } from './missions.js';
 import { Hud } from './hud.js';
+import { initCrew, useCrew } from './crew.js';
 import { parseShot, stageScene } from './shots.js';
 
 const shot = parseShot();
 const canvas = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-// Fill cost scales with pixel count and this scene is only ~5k triangles, so
-// the pixel ratio is the lever that matters: cap at 1.5 (not 2), and let the
-// adaptive monitor in the frame loop step it down further on slow hardware.
+// Fill cost scales with pixel count and this scene is only ~5k triangles,
+// so the pixel ratio is the lever that matters: cap at 1.5 (not 2), and
+// let the adaptive monitor in the frame loop step it down on slow kit.
 const BASE_PIXEL_RATIO = Math.min(devicePixelRatio, 1.5);
 renderer.setPixelRatio(BASE_PIXEL_RATIO);
 renderer.setSize(innerWidth, innerHeight);
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xffb37a);
+scene.background = new THREE.Color(0xffb37a); // buildWorld paints the gradient over this
 scene.fog = new THREE.Fog(0xffc38f, 55, 210);
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 600);
 camera.position.set(0, 30, 130);
@@ -35,22 +40,30 @@ const hemi = new THREE.HemisphereLight(0xffd9b0, 0x8a6a4a, 0.35); scene.add(hemi
 
 const G = {
   scene, camera, renderer, time: 0, state: 'menu', shake: 0, spawnCd: 0,
-  cash: 250, completed: 0, missionIndex: 0, cars: [], peds: [], colliders: [],
+  cash: 250, completed: 0, missionIndex: 0, respect: 0,
+  standing: freshStanding(), stats: freshStats(),
+  cars: [], peds: [], colliders: [],
   wanted: 0, wantedBlinking: false, hiddenT: 0, decayT: 0, bustT: 0, danger: null,
   nearCar: null, shotMode: null, rng: makeRng(shot ? shot.seed * 7919 : (Date.now() % 100000) + 7),
   audio: new GameAudio(),
 };
-G.rankName = () => rankFor(G.completed);
+G.rankName = () => respectRank(G.respect || 0);
+// Career completion, one fixed formula: the story is worth 70, a
+// friendly-or-better map is worth 20 shared across the districts, and
+// the first ten cars stolen share the last 10.
+G.completionPct = () => G.completed / 5 * 70 +
+  Object.values(G.standing).filter((v) => v > 60).length / 3 * 20 +
+  Math.min(10, G.stats.stolen) / 10 * 10;
 G.damagePlayer = (n) => damagePlayer(G, n);
 window.__game = G; // debug/playtest handle; harmless in normal play
-// Adaptive quality state, driven by the frame loop below. Levels are fixed
-// multipliers on BASE_PIXEL_RATIO; the monitor only ever steps DOWN.
+// Adaptive quality state, driven by the frame loop below. Levels are
+// fixed multipliers on BASE_PIXEL_RATIO; the monitor only steps DOWN.
 const quality = { level: 0, lastAvgMs: 0, accMs: 0, frames: 0 };
 const QUALITY_FACTORS = [1, 0.75, 0.5];
 G.quality = quality;
 G.input = new Input(canvas, () => togglePause());
 G.hud = new Hud(G);
-initPolice(G); initCombat(G);
+initPolice(G); initCombat(G); initCrew(G);
 buildWorld(G);
 createPlayer(G);
 G.missions = new Missions(G);
@@ -90,23 +103,21 @@ function respawn(place) {
   if (P.car) { const c = P.car; P.car = null; c.kind = 'parked'; c.speed = 0; G.hud.hideVehicle(); }
   P.mesh.visible = true;
   P.x = place.x; P.z = place.z; P.health = TUNING.playerHealth; P.dead = false;
+  P.armour = 40; // the hospital and the station both hand Rio a vest
   P.mesh.position.set(P.x, 0, P.z);
-  // setWanted(G, 0) only zeroes the star count: police.js clears the pursuit
-  // timers solely when the new level is above zero, and bustT is not cleared
-  // there at all — so a grab timer that was part-way to TUNING.bustTime when
-  // Rio died or was busted would survive the respawn and, since updatePolice
-  // never decays bustT while wanted is 0, greet the next wanted episode
-  // almost fully charged: a near-instant bust on first police contact.
-  // startGame already resets these for a fresh run; a respawn is a fresh
-  // run too. The stale danger marker and blinking flag go with them, so
-  // pedestrians do not flee the hospital/station spawn and the HUD does not
-  // blink stars Rio no longer has.
+  // setWanted(G, 0) only zeroes the star count: police.js clears the
+  // pursuit timers solely when the new level is above zero, and bustT is
+  // not cleared there at all — so a grab timer part-way to TUNING.bustTime
+  // when Rio died would survive the respawn and, since updatePolice never
+  // decays bustT at wanted 0, greet the next episode almost fully charged.
+  // A respawn is a fresh run; sweep the timers like startGame does. The
+  // stale danger marker and blinking flag go too, so pedestrians do not
+  // flee the spawn pad and the HUD does not blink stars Rio no longer has.
   G.bustT = 0; G.hiddenT = 0; G.decayT = 0; G.lastSeenT = 0;
-  G.danger = null; G.wantedBlinking = false;
-  // Same sweep, second half (startGame does this too): death sets a camera
-  // shake via damagePlayer and a shot may have just put the pistol on
-  // cooldown; neither belongs in the first seconds back on the street, and
-  // a leftover police spawn cooldown would delay the next legitimate spawn.
+  G.danger = null; G.wantedBlinking = false; G.peakWanted = 0;
+  // Second half of the sweep: a leftover camera shake, a pistol still on
+  // cooldown, or a police spawn cooldown would all bleed into the first
+  // seconds back on the street.
   G.shake = 0; G.fireCd = 0; G.recoil = 0; G.spawnCd = 0;
   setWanted(G, 0);
   for (const cop of policeCars(G)) cop.speed = 0;
@@ -142,27 +153,29 @@ function showMenu() {
 }
 function startGame(fresh) {
   G.audio.unlock();
-  if (fresh) { G.cash = 250; G.completed = 0; G.missionIndex = 0; }
-  else {
+  if (fresh) {
+    G.cash = 250; G.completed = 0; G.missionIndex = 0; G.respect = 0;
+    G.standing = freshStanding(); G.stats = freshStats();
+    G.player.armour = 0;
+  } else {
     const s = loadSave();
-    if (s) { G.cash = s.cash; G.completed = s.completed; G.missionIndex = s.mission; }
+    if (s) {
+      G.cash = s.cash; G.completed = s.completed; G.missionIndex = s.mission;
+      G.respect = s.respect; G.standing = s.standing; G.stats = s.stats;
+      G.player.armour = s.armour;
+    }
   }
+  initCrew(G); // cooldowns never carry across runs
   const P = G.player;
   if (P.car) exitCar(G);
-  // setWanted(G, 0) below only zeroes the star count: police.js clears the
-  // pursuit timers solely when the new level is above zero, so a bust that
-  // was part-way through its grab timer — and the hidden/decay timers —
-  // would otherwise carry into this fresh run and bust Rio almost instantly
-  // on first police contact. Reset them explicitly here.
-  G.bustT = 0; G.hiddenT = 0; G.decayT = 0; G.lastSeenT = 0;
+  // setWanted(G, 0) below only zeroes the stars (see respawn): reset the
+  // pursuit timers explicitly or a half-charged bust follows Rio in.
+  G.bustT = 0; G.hiddenT = 0; G.decayT = 0; G.lastSeenT = 0; G.peakWanted = 0;
   P.x = 2; P.z = 100; P.angle = Math.PI; P.health = TUNING.playerHealth; P.mesh.visible = true;
   P.mesh.position.set(P.x, 0, P.z);
   P.mesh.rotation.y = P.angle; P.camYaw = Math.PI; P.camPitch = 0.32;
-  // Same leftover-state sweep, second half: a stale danger marker would make
-  // pedestrians flee Rio's spawn point, a leftover camera shake or fire
-  // cooldown would bleed into the opening seconds, and the engine/siren
-  // loops from a previous run keep sounding until something else stops them.
-  // A dead flag, if ever set, must not follow Rio into the new run either.
+  // Same leftover-state sweep, second half: stale danger, shake, fire
+  // cooldown, a dead flag, and the engine/siren loops of a previous run.
   G.danger = null; G.shake = 0; G.spawnCd = 0; G.fireCd = 0;
   P.dead = false; P.walkPhase = 0;
   G.audio.setEngine(false, 0); G.audio.setSiren(false, 0);
@@ -179,14 +192,18 @@ function togglePause() {
     G.state = 'paused';
     overlay.classList.remove('clear'); overlay.classList.add('solid');
     menuEl.classList.add('hidden');
-    bigEl.textContent = 'PAUSED'; bigEl.style.color = '#ffd23f'; bigEl.classList.remove('hidden', 'busted');
-    subEl.textContent = 'Palmshade waits for no one. Well — just this once.'; subEl.classList.remove('hidden');
+    // The pause screen IS the career panel now: its own header carries
+    // the word PAUSED, so the giant overlay text stays hidden — and the
+    // panel (inside the pointer-events-free HUD) never blocks Resume.
+    bigEl.classList.add('hidden'); subEl.classList.add('hidden');
+    G.hud.showStats(G);
     resumeBtn.classList.remove('hidden');
     G.audio.setEngine(false, 0);
   } else if (G.state === 'paused') resumeGame();
 }
 function resumeGame() {
   if (G.state !== 'paused') return;
+  G.hud.hideStats();
   hideOverlay(); G.state = 'playing';
 }
 document.getElementById('btn-start').addEventListener('click', () => startGame(true));
@@ -206,6 +223,11 @@ addEventListener('resize', () => {
 });
 addEventListener('keydown', (e) => {
   if (e.code === 'KeyM') { const m = G.audio.toggleMute(); if (G.state === 'playing') G.hud.banner(m ? 'SOUND OFF' : 'SOUND ON', '', 1.2); }
+  if (G.state !== 'playing') return;
+  if (e.code === 'KeyR') { const st = G.audio.cycleStation(); G.hud.showEvent(st.name, st.genre); }
+  else if (e.code === 'KeyZ') useCrew(G, 'plates');
+  else if (e.code === 'KeyX') useCrew(G, 'fix');
+  else if (e.code === 'KeyC') useCrew(G, 'eyes');
 });
 if (shot) {
   G.state = 'playing';
@@ -216,17 +238,19 @@ if (shot) {
 } else {
   showMenu();
 }
-// The render loop: menu gets a slow orbit over the live city; shot mode freezes
-// the tableau but keeps the police lights flashing; play runs every system.
+// The render loop: the menu gets a slow orbit over the live city; shot
+// mode freezes the tableau but keeps lights, rotors and sirens alive;
+// play runs every system.
 let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
   const rawMs = now - last;
   const dt = Math.min(0.05, rawMs / 1000); last = now;
-  // Adaptive quality insurance for unknown hardware: average the raw frame
-  // time over a ~2 s window; if it stays above 24 ms, step the pixel ratio
-  // down one fixed notch (1x -> 0.75x -> 0.5x of base). Deterministic: fixed
-  // window, threshold and steps — and it never steps back up mid-session.
+  // Adaptive quality insurance for unknown hardware: average the raw
+  // frame time over a ~2 s window; if it stays above 24 ms, step the
+  // pixel ratio down one fixed notch (1x -> 0.75x -> 0.5x of base).
+  // Deterministic — fixed window, threshold and steps — and it never
+  // steps back up mid-session.
   if (G.state !== 'paused') {
     quality.accMs += rawMs; quality.frames++;
     if (quality.accMs >= 2000) {
@@ -253,13 +277,21 @@ function frame(now) {
       const on = Math.sin(G.time * 7) > 0;
       car.lightBar.children[0].material.color.setHex(on ? 0xff6666 : 0x881111);
       car.lightBar.children[1].material.color.setHex(on ? 0x113388 : 0x6688ff);
+      if (car.sirenGlow) car.sirenGlow.material.color.setHex(on ? 0xff2222 : 0x2255ff);
     }
+    if (G.heli) updateHeli(G, dt);
     G.hud.update(0);
   } else if (G.state === 'playing' || G.state === 'over') {
     if (G.state === 'playing') {
       updatePlayer(G, dt);
       updateCombat(G, dt);
       G.missions.update(dt);
+      // Career distance and top speed, sampled from the driven car.
+      if (G.player.car) {
+        const s = Math.abs(G.player.car.speed);
+        G.stats.distKm += s * dt / 1000;
+        if (s * 3.6 > G.stats.topSpeed) G.stats.topSpeed = s * 3.6;
+      }
     }
     updateVehicles(G, dt);
     updatePeds(G, dt);

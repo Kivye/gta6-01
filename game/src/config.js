@@ -1,12 +1,14 @@
-// Palmshade Heat — world constants, car catalog, district palettes, tuning.
-// All numbers here are mine, picked so the city reads as a sun-baked coastal grid.
+// Palmshade Heat — shared constants: the city grid, the car catalogue,
+// district palettes, pursuit tuning, and the two progression ladders
+// (story rank by missions, respect rank by deeds). Everything numeric
+// that more than one module needs lives here so the numbers cannot drift.
 export const WORLD = {
-  step: 26,          // distance between neighbouring road centrelines
-  roadHalf: 4.2,     // half width of a road
-  walkHalf: 6.4,     // half width of road + sidewalk band
-  halfRoads: 4,      // roads run from -4..+4 in both axes (9 x 9 centrelines)
-  seaZ: 118,         // sea plane starts past this z
-  blockInset: 8.2,   // building plots start this far from a road centreline
+  step: 26,          // metres between neighbouring road centrelines
+  roadHalf: 4.2,     // half the width of a road surface
+  walkHalf: 6.4,     // half the road + sidewalk band
+  halfRoads: 4,      // centrelines run -4..+4 on both axes (9 x 9)
+  seaZ: 118,         // the sea plane begins past this z
+  blockInset: 8.2,   // building plots start this far from a centreline
 };
 export const CITY_EDGE = WORLD.step * WORLD.halfRoads; // 104
 export function roadCentres() {
@@ -14,8 +16,8 @@ export function roadCentres() {
   for (let i = -WORLD.halfRoads; i <= WORLD.halfRoads; i++) out.push(i * WORLD.step);
   return out;
 }
-// Districts: Marina hugs the sea (high z), The Heights is the north-east glass quarter,
-// Old Town fills the middle and west.
+// The Marina hugs the sea (high z), The Heights is the north-east glass
+// quarter, and Old Town fills the middle and the west.
 export function districtAt(x, z) {
   if (z > 34) return 'Marina';
   if (x > 30 && z < -22) return 'The Heights';
@@ -33,7 +35,8 @@ export const CHOP_SHOPS = [
 export const HOSPITAL = { x: -78, z: 78 };
 export const STATION = { x: 26, z: -78 };
 export const PIER = { x: 0, z: 132 };
-// The 12 car models. value = clean fence price; the chop shop pays value * condition.
+// Twelve car models. value is the clean fence price; a chop shop pays
+// value scaled by the condition the car arrives in.
 export const CAR_MODELS = [
   { id: 'compact',     name: 'Pigeon Compact',    value: 400,  color: 0xe86a5e, len: 3.4, wid: 1.7, hgt: 1.25, top: 26, accel: 11 },
   { id: 'sedan',       name: 'Meridian Sedan',    value: 650,  color: 0x5e7fe8, len: 4.3, wid: 1.8, hgt: 1.3,  top: 30, accel: 12 },
@@ -57,5 +60,21 @@ export const TUNING = {
   decayDelay: 7,       // seconds hidden before stars start to fall
   decayStep: 6,        // seconds of hiding per star removed
 };
+// Story rank: a title per completed mission, kept for mission banners.
 export const RANKS = ['Nobody', 'Runner', 'Wheelman', 'Fence Friend', 'Shot Caller', 'Palmshade Legend'];
 export function rankFor(completed) { return RANKS[Math.min(RANKS.length - 1, completed)]; }
+// Respect: points earned only from real deeds (missions, fences, clean
+// escapes, near misses, crew assists), and the title ladder they climb.
+export const RESPECT_LADDER = [
+  [0, 'Nobody'], [120, 'Runner'], [300, 'Wheelman'],
+  [550, 'Fence Friend'], [850, 'Shot Caller'], [1200, 'Palmshade Legend'],
+];
+export function respectRank(points) {
+  let title = RESPECT_LADDER[0][1];
+  for (const [at, name] of RESPECT_LADDER) if (points >= at) title = name;
+  return title;
+}
+// District standing bands, 0..100: how a neighbourhood feels about Rio.
+export function standingBand(v) {
+  return v < 25 ? 'HOSTILE' : v < 45 ? 'WARY' : v <= 60 ? 'NEUTRAL' : v <= 80 ? 'FRIENDLY' : 'ALLIED';
+}

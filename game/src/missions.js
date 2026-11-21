@@ -1,5 +1,10 @@
-// The five chained story missions plus the free-roam chop-shop fencing loop.
-import { CHOP_SHOPS, PIER } from './config.js';
+// The five chained story missions plus the free-roam chop-shop fencing
+// loop. Each mission has a named giver whose portrait, lines and stage
+// directions the HUD reads through stageInfo() — the runner owns the
+// state, the HUD only ever reads it. Completing missions and fencing
+// cars feed the wider economy here: cash, career stats, respect and
+// district standing all move in this file's two payout paths.
+import { CHOP_SHOPS, PIER, districtAt } from './config.js';
 import { clamp, dist2d } from './random.js';
 import { createCar, removeCar } from './vehicles.js';
 import { spawnPed, removePed } from './pedestrians.js';
@@ -9,17 +14,68 @@ import { writeSave } from './save.js';
 export function fenceValue(car) {
   return Math.round(car.model.value * clamp(car.health, 4, 100) / 100);
 }
+// The givers: Mara Vale fences out of the chop shops, Dario Sol runs
+// Marina courier work, Sable Ortiz whispers from The Heights.
+const GIVERS = {
+  mara: { name: 'Mara Vale', role: 'Chop Shop Fence', color: '#a4133c' },
+  dario: { name: 'Dario Sol', role: 'Marina Courier', color: '#0e7c7b' },
+  sable: { name: 'Sable Ortiz', role: 'Heights Insider', color: '#6c3fb5' },
+};
 export const MISSION_DEFS = [
-  { name: 'First Wheels', reward: 150, intro: 'Rio needs wheels and a fence. Steal any car and sell it at a chop shop.', outro: 'First sale done. The fence remembers your face now.' },
-  { name: 'Hot Package', reward: 350, intro: 'A package waits in the Marina. Grab it and run it to Old Town — the clock is ticking.', outro: 'Delivered hot and on time. Word travels fast in Palmshade.' },
-  { name: 'Rival Colors', reward: 600, intro: 'A rival crew is moving a briefcase across town. Stop their car, take it, bring it to the West Chop Shop.', outro: 'Their colors just faded. Yours are getting brighter.' },
-  { name: 'Sirens', reward: 1200, intro: 'A Vesper GT sits in a Heights showroom. Take it, shake the 3-star heat, then fence it.', outro: 'You outran the sirens and cashed the Vesper. Big league now.' },
-  { name: 'The Golden Hour', reward: 3000, intro: 'The Aurum One rolls in a convoy at golden hour. Steal it under 4-star heat and rivals\' fire — deliver it to the pier.', outro: 'The golden car gleams on the pier as the sun drops. Palmshade is yours, legend.' },
+  { name: 'First Wheels', reward: 150, giver: 'mara', intro: 'Rio needs wheels and a fence. Steal any car and sell it at a chop shop.', outro: 'First sale done. The fence remembers your face now.' },
+  { name: 'Hot Package', reward: 350, giver: 'dario', intro: 'A package waits in the Marina. Grab it and run it to Old Town — the clock is ticking.', outro: 'Delivered hot and on time. Word travels fast in Palmshade.' },
+  { name: 'Rival Colors', reward: 600, giver: 'mara', intro: 'A rival crew is moving a briefcase across town. Stop their car, take it, bring it to the West Chop Shop.', outro: 'Their colors just faded. Yours are getting brighter.' },
+  { name: 'Sirens', reward: 1200, giver: 'sable', intro: 'A Vesper GT sits in a Heights showroom. Take it, shake the 3-star heat, then fence it.', outro: 'You outran the sirens and cashed the Vesper. Big league now.' },
+  { name: 'The Golden Hour', reward: 3000, giver: 'mara', intro: 'The Aurum One rolls in a convoy at golden hour. Steal it under 4-star heat and rivals\' fire — deliver it to the pier.', outro: 'The golden car gleams on the pier as the sun drops. Palmshade is yours, legend.' },
+];
+// Per-stage flow, parallel to the runner's stages (2, 2, 3, 3, 2 of
+// them): `next` names the step after the current one (null on a final
+// stage), and `line` is what the giver says while that stage runs —
+// stage zero always speaks the mission's intro instead.
+const STAGE_FLOW = [
+  [
+    { next: 'Deliver the stolen car to a chop shop garage.', line: null },
+    { next: null, line: 'Good wheels. Now bring it to my West garage — the door pays on sight.' },
+  ],
+  [
+    { next: 'Deliver the package to Old Town — beat the clock!', line: null },
+    { next: null, line: 'You have it? Move — Old Town, and do not stop for sirens.' },
+  ],
+  [
+    { next: 'Take the briefcase from the stopped rival car.', line: null },
+    { next: 'Bring the briefcase to the West Chop Shop.', line: 'He is stopped. Grab the case before his crew regroups.' },
+    { next: null, line: 'Case in hand. West Chop Shop — my door, nobody else\'s.' },
+  ],
+  [
+    { next: 'Survive: break line of sight until the wanted stars clear.', line: null },
+    { next: 'Heat is gone — fence the Vesper at the Marina Chop Shop.', line: 'Three stars — break their line of sight and stay dark.' },
+    { next: null, line: 'Heat is gone. Marina shop, and keep the paint pretty.' },
+  ],
+  [
+    { next: 'Deliver the Aurum One to the pier before time runs out!', line: null },
+    { next: null, line: 'Golden and loud. The pier, before the whole city wakes up.' },
+  ],
 ];
 const PKG = { x: 28, z: 80 }, DROP = { x: -28, z: 2 }, SHOWROOM = { x: 54, z: -50 };
 
 export class Missions {
   constructor(G) { this.G = G; this.idx = 0; this.stage = 0; this.timer = -1; this.spawned = []; this.active = false; this.done = false; this.targetCar = null; }
+  // The one read the HUD panels are allowed: a snapshot of the live
+  // runner — position in the chain, stage progress, the NEXT step, the
+  // giver and the line being spoken right now.
+  stageInfo() {
+    if (this.done || !this.active) return null;
+    const def = MISSION_DEFS[this.idx];
+    if (!def) return null;
+    const flow = STAGE_FLOW[this.idx][this.stage] || { next: null, line: null };
+    const giver = GIVERS[def.giver];
+    return {
+      num: this.idx + 1, of: MISSION_DEFS.length, name: def.name, reward: def.reward,
+      stage: this.stage + 1, total: STAGE_FLOW[this.idx].length,
+      next: flow.next, giver, line: this.stage === 0 ? def.intro : flow.line,
+      timer: this.timer,
+    };
+  }
   start(idx) {
     const G = this.G;
     this.cleanup();
@@ -49,9 +105,9 @@ export class Missions {
   cleanup() {
     for (const e of this.spawned) {
       if (e.model) {
-        // Rio may still be sitting in a spawned car (e.g. the Aurum at the pier
-        // the moment the finale completes): put him back on foot first, or
-        // removeCar leaves him car-less with his mesh still hidden — invisible.
+        // Rio may still be sitting in a spawned car (e.g. the Aurum at
+        // the pier the moment the finale completes): put him back on
+        // foot first, or removeCar leaves him car-less and invisible.
         if (this.G.player.car === e && this.G.exitCar) this.G.exitCar();
         if (this.G.cars.includes(e)) removeCar(this.G, e);
       }
@@ -86,6 +142,11 @@ export class Missions {
     const G = this.G, def = MISSION_DEFS[this.idx];
     const pay = def.reward;
     G.cash += pay; G.completed = this.idx + 1;
+    G.stats.earned += pay;
+    G.respect += 120;
+    // Word of a finished job travels in the district it finished in.
+    const d = districtAt(G.player.x, G.player.z);
+    G.standing[d] = clamp(G.standing[d] + 10, 0, 100);
     G.audio.success(); G.audio.cashSound();
     G.hud.banner('MISSION COMPLETE', `${def.outro}\n+$${pay} — Rank: ${G.rankName()}`, 6);
     this.cleanup();
@@ -127,11 +188,10 @@ export class Missions {
   fenceCheck() {
     const G = this.G, car = G.player.car;
     if (!car || !car.stolen || car.model.id === 'police') return false;
-    // A live mission's target car is cargo, not merchandise: fencing it early
-    // (the Vesper during Sirens stage 1, the rival car, the Aurum) deletes the
-    // objective vehicle and softlocks the chain — those missions have no timer
-    // or fail path to recover it. The one exception is Sirens stage 2, where
-    // fencing the Vesper IS the objective.
+    // A live mission's target car is cargo, not merchandise: fencing it
+    // early (the Vesper during Sirens stage 1, the rival car, the Aurum)
+    // deletes the objective vehicle and softlocks the chain. The one
+    // exception is Sirens stage 2, where fencing the Vesper IS the job.
     if (this.active && this.targetCar && car === this.targetCar && !(this.idx === 3 && this.stage === 2)) {
       G.hud.banner('NOT FOR SALE', 'This car is mission cargo — the fence will not touch it.', 3);
       return false;
@@ -141,9 +201,13 @@ export class Missions {
         const pay = fenceValue(car);
         const wasTarget = car === this.targetCar;
         const soldName = car.model.name;
+        const shopDistrict = districtAt(shop.x, shop.z);
         G.exitCar();
         removeCar(G, car);
         G.cash += pay; G.audio.cashSound();
+        G.stats.fenced++; G.stats.earned += pay;
+        G.respect += 30;
+        G.standing[shopDistrict] = clamp(G.standing[shopDistrict] + 5, 0, 100);
         G.hud.banner('CAR FENCED', `${soldName} sold for $${pay}`, 3);
         writeSave(G);
         if (this.active && this.idx === 0 && this.stage === 1) this.complete();
@@ -224,7 +288,7 @@ export class Missions {
       if (!car.wp || dist2d(p.x, p.z, car.wp.x, car.wp.z) < 4) {
         const s = 26;
         const ix = Math.round(p.x / s) * s, iz = Math.round(p.z / s) * s;
-        // Convoy drifts south toward the Marina, slowly.
+        // The convoy drifts south toward the Marina, slowly.
         car.wp = { x: ix, z: clamp(iz + s, -104, 104) };
         if (iz >= 104) car.wp = { x: clamp(ix + s, -104, 104), z: iz };
       }

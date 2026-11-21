@@ -1,18 +1,38 @@
-// Procedural WebAudio: engine, siren, shots, thuds, horns, jingles, ambient loop.
-// Nothing starts until unlock() is called from a user gesture.
+// Procedural WebAudio: engine, siren, gunshots, thuds, horns, jingles —
+// and a three-station radio. Each station owns a bass pattern and the
+// music loop plays the tuned station's pattern note by note, so changing
+// station audibly changes the music. Nothing sounds until unlock() runs
+// from a user gesture.
+export const STATIONS = [
+  { name: 'PALM 98.4', genre: 'Island Pop', track: 'Neon Palms', bass: [55, 55, 65.4, 49] },
+  { name: 'SOL 101.9', genre: 'Sunset Groove', track: 'Golden Hour Drive', bass: [49, 49, 58.3, 65.4] },
+  { name: 'REEF 88.1', genre: 'Night Drive', track: 'Midnight Causeway', bass: [41.2, 55, 41.2, 61.7] },
+];
 export class GameAudio {
-  constructor() { this.ctx = null; this.muted = false; this.musicTimer = 0; this.sirenPhase = 0; }
+  constructor() {
+    this.ctx = null; this.muted = false; this.musicTimer = 0; this.sirenPhase = 0;
+    this.stationIndex = 0; this.musicStep = 0;
+  }
+  get station() { return STATIONS[this.stationIndex]; }
+  cycleStation() {
+    this.stationIndex = (this.stationIndex + 1) % STATIONS.length;
+    if (this.ctx && !this.muted) { // a short tuning sweep so the change is heard
+      this.blip(300, 0.07, 'sine', 0.08);
+      this.blip(520, 0.09, 'sine', 0.08, 0.06);
+    }
+    return this.station;
+  }
   unlock() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       this.master = this.ctx.createGain(); this.master.gain.value = 0.5; this.master.connect(this.ctx.destination);
-      // Engine: sawtooth through a lowpass, pitch follows speed.
+      // Engine: a sawtooth through a lowpass, pitch tracking speed.
       this.engOsc = this.ctx.createOscillator(); this.engOsc.type = 'sawtooth'; this.engOsc.frequency.value = 55;
       this.engFil = this.ctx.createBiquadFilter(); this.engFil.type = 'lowpass'; this.engFil.frequency.value = 300;
       this.engGain = this.ctx.createGain(); this.engGain.gain.value = 0;
       this.engOsc.connect(this.engFil).connect(this.engGain).connect(this.master); this.engOsc.start();
-      // Siren: triangle wave flipped between two tones.
+      // Siren: a triangle wave flipped between two tones.
       this.sirOsc = this.ctx.createOscillator(); this.sirOsc.type = 'triangle'; this.sirOsc.frequency.value = 700;
       this.sirGain = this.ctx.createGain(); this.sirGain.gain.value = 0;
       this.sirOsc.connect(this.sirGain).connect(this.master); this.sirOsc.start();
@@ -63,9 +83,11 @@ export class GameAudio {
     this.musicTimer -= dt;
     if (this.musicTimer <= 0) {
       this.musicTimer = 0.5;
-      const bass = [55, 55, 65.4, 49][(Math.random() * 4) | 0];
+      const pattern = this.station.bass;
+      const bass = pattern[this.musicStep % pattern.length];
+      this.musicStep++;
       this.blip(bass, 0.42, 'sine', 0.16);
-      if (Math.random() < 0.4) this.blip(bass * 4, 0.5, 'triangle', 0.03);
+      if (this.musicStep % 4 === 0) this.blip(bass * 4, 0.5, 'triangle', 0.03);
     }
   }
 }

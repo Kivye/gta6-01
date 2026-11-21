@@ -1,8 +1,9 @@
-// Palmshade Heat — hand-in program (Node 22, standard library only).
-// Copies this repo's game/ and screenshots/ into the output directory and writes
-// dossier.json there with the vendored make.fun library, using the gta6-01 caps.
-// Run it twice and the output is byte-identical: the copy is a plain recursive
-// copy of static files and buildDossier is deterministic.
+// Palmshade Heat — the hand-in program (Node 22, standard library only).
+// It copies this repo's game/ and screenshots/ into the output directory
+// and writes dossier.json there with the vendored make.fun library,
+// under the gta6-01 caps. Run it twice and the output is byte-identical:
+// the copy is a plain recursive copy of static files and buildDossier is
+// deterministic.
 //   node main.ts                       (writes to /output)
 //   MAKEFUN_OUTPUT_DIR=out node main.ts
 
@@ -14,20 +15,17 @@ import { buildDossier } from './vendor/makefun-game.ts';
 const repoDir = fileURLToPath(new URL('.', import.meta.url));
 const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-// Pre-flight caps from the gta6-01 kit rules, named once here so the
-// validation below and the dossier options at the bottom cannot drift apart:
-// the whole game payload may not exceed game_max_bytes, and no single
-// screenshot may exceed the per-screenshot byte cap.
+// The kit's caps, named once so the validation below and the dossier
+// options at the bottom cannot drift apart: the whole game payload
+// against game_max_bytes, each screenshot against its own byte cap, the
+// dossier against 1.5 MiB and game/index.html against 1 MiB.
 const GAME_MAX_BYTES = 50331648;
 const SCREENSHOT_MAX_BYTES = 262144;
-// Two more caps from the same kit rules, likewise named once here: the
-// dossier handed in may not exceed 1.5 MiB, and the game's page itself,
-// game/index.html, may not exceed 1 MiB.
 const DOSSIER_MAX_BYTES = 1572864;
 const INDEX_HTML_MAX_BYTES = 1048576;
 
-// Inventory of a copied payload directory: every file under it, in stable
-// sorted path order, with its byte size, plus the total payload byte count.
+// Inventory of a payload directory: every file under it, in stable
+// sorted path order, with its byte size, plus the total byte count.
 // Computed from the files themselves, so it is deterministic — the same
 // payload always yields the same inventory.
 function payloadInventory(root) {
@@ -49,20 +47,17 @@ function payloadInventory(root) {
   return { files, totalBytes };
 }
 
-// Pre-flight validation over the two payload inventories, run before the
-// dossier is built so a bad hand-in fails here with a precise reason rather
-// than at the sealed gate. Every violation names the offending file together
-// with its actual size and the cap it broke:
-//   - each screenshots/*.jpg file, on its own, against SCREENSHOT_MAX_BYTES;
-//   - the game payload as a whole against GAME_MAX_BYTES (game_max_bytes),
-//     naming the largest single contributor when the total is over;
-//   - game/index.html, on its own, against INDEX_HTML_MAX_BYTES, as part of
-//     the same sorted game/ walk (its inventory entry is the one named
-//     exactly "index.html");
-//   - the dossier bytes, when the caller passes them (dossierBytes, the
-//     exact bytes buildDossier produced and about to be written), against
-//     DOSSIER_MAX_BYTES.
-// Returns nothing on success; the caller logs the inventories it validated.
+// Pre-flight validation over the payload inventories, run before the
+// dossier is built so a bad hand-in fails here with a precise reason
+// rather than at the sealed gate. Every violation names the offending
+// file with its actual size and the cap it broke:
+//   - each screenshots/*.jpg on its own, against SCREENSHOT_MAX_BYTES;
+//   - game/index.html on its own, against INDEX_HTML_MAX_BYTES (its
+//     inventory entry is the one named exactly "index.html");
+//   - the dossier bytes, when the caller passes them, against
+//     DOSSIER_MAX_BYTES;
+//   - the game payload as a whole against GAME_MAX_BYTES, naming the
+//     largest single contributor when the total is over.
 function validatePayload(gamePayload, shotsPayload, dossierBytes = null) {
   for (const shot of shotsPayload.files) {
     if (!/\.jpg$/i.test(shot.path)) continue;
@@ -117,10 +112,9 @@ const dossier = buildDossier(outDir, {
   game_max_bytes: GAME_MAX_BYTES,
   game_path_max_bytes: 1000,
 });
-// Hand-in gate for the dossier itself: check the exact bytes buildDossier
-// produced against the dossier cap before anything is written, so an
-// oversized dossier aborts the hand-in here instead of reaching the sealed
-// gate. The check only reads the byte count — the bytes written below are
-// the very bytes buildDossier returned, unchanged.
+// The dossier's own gate: check the exact bytes buildDossier produced
+// against the dossier cap before anything is written, so an oversized
+// dossier aborts the hand-in here instead of reaching the sealed gate.
+// The bytes written below are the very bytes checked, unchanged.
 validatePayload(payload, shotsPayload, dossier.byteLength);
 writeFileSync(join(outDir, 'dossier.json'), dossier);

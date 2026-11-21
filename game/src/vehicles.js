@@ -1,4 +1,8 @@
-// Car factory (12 procedural models), arcade driving physics and traffic AI.
+// The car factory (twelve procedural models), arcade driving physics,
+// traffic AI, collisions — and the golden-hour light kit every car
+// carries: a headlight bar, warm nose glow, red tail glow, a pool of
+// light on the road, and for cruisers a siren glow on the asphalt that
+// follows the lightbar flash. Shared materials keep the kit's cost flat.
 import { MODEL_BY_ID, TRAFFIC_MODELS, WORLD, CITY_EDGE } from './config.js';
 import { rngPick, clamp, dist2d, angleLerp } from './random.js';
 import { isOnRoad, snapToRoad, insideBuilding } from './world.js';
@@ -6,6 +10,27 @@ import { isOnRoad, snapToRoad, insideBuilding } from './world.js';
 const bodyMat = (hex) => new THREE.MeshLambertMaterial({ color: hex });
 const darkMat = new THREE.MeshLambertMaterial({ color: 0x1c2126 });
 const glassMat = new THREE.MeshLambertMaterial({ color: 0x9fd4e8 });
+
+// Shared glow assets, built once: a radial-gradient sprite texture, one
+// sprite material per (colour, opacity) pair, one pool plane.
+let glowTex = null;
+const glowMats = {};
+function glowSpriteMat(color, opacity) {
+  if (!glowTex) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const cx = cv.getContext('2d');
+    const grad = cx.createRadialGradient(32, 32, 2, 32, 32, 30);
+    grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = grad; cx.fillRect(0, 0, 64, 64);
+    glowTex = new THREE.CanvasTexture(cv);
+  }
+  const key = color + '/' + opacity;
+  if (!glowMats[key]) glowMats[key] = new THREE.SpriteMaterial({ map: glowTex, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false });
+  return glowMats[key];
+}
+const poolGeo = new THREE.PlaneGeometry(3.0, 4.6);
+const poolMat = new THREE.MeshBasicMaterial({ color: 0xffdf9a, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, depthWrite: false });
+const sirenGeo = new THREE.CircleGeometry(3.6, 20);
 
 export function makeCarMesh(model, rng) {
   const g = new THREE.Group();
@@ -56,10 +81,28 @@ export function makeCarMesh(model, rng) {
   const brakeMat = new THREE.MeshBasicMaterial({ color: 0x550000 });
   const brake = new THREE.Mesh(new THREE.BoxGeometry(model.wid * 0.8, 0.16, 0.08), brakeMat);
   brake.position.set(0, 0.62, -model.len / 2 - 0.03); g.add(brake);
+  // One pale headlight bar across the nose.
+  const headBar = new THREE.Mesh(new THREE.BoxGeometry(model.wid * 0.72, 0.15, 0.07),
+    new THREE.MeshBasicMaterial({ color: 0xfff3b8 }));
+  headBar.position.set(0, 0.66, model.len / 2 + 0.03); g.add(headBar);
   const smoke = new THREE.Mesh(new THREE.SphereGeometry(0.5, 7, 6),
     new THREE.MeshBasicMaterial({ color: 0x555555, transparent: true, opacity: 0 }));
   smoke.position.set(0, 1.3, model.len * 0.35); smoke.visible = false; g.add(smoke);
-  return { group: g, wheels, brakeMat, lightBar, smoke };
+  // The glow kit: nose sprite, tail sprite, headlight pool on the road.
+  const glow = new THREE.Sprite(glowSpriteMat(0xffe9b0, 0.5));
+  glow.scale.set(2.7, 1.3, 1); glow.position.set(0, 0.66, model.len / 2 + 0.5); g.add(glow);
+  const tail = new THREE.Sprite(glowSpriteMat(0xff4444, 0.45));
+  tail.scale.set(2.0, 0.85, 1); tail.position.set(0, 0.66, -model.len / 2 - 0.4); g.add(tail);
+  const pool = new THREE.Mesh(poolGeo, poolMat);
+  pool.rotation.x = -Math.PI / 2; pool.position.set(0, 0.05, model.len / 2 + 2.6); g.add(pool);
+  // Cruisers spill their siren colours onto the asphalt; the material is
+  // per-car because its colour chases the lightbar phase.
+  let sirenGlow = null;
+  if (lightBar) {
+    sirenGlow = new THREE.Mesh(sirenGeo, new THREE.MeshBasicMaterial({ color: 0xff2222, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }));
+    sirenGlow.rotation.x = -Math.PI / 2; sirenGlow.position.y = 0.07; g.add(sirenGlow);
+  }
+  return { group: g, wheels, brakeMat, lightBar, smoke, sirenGlow };
 }
 
 export function createCar(G, modelId, x, z, angle, kind) {
@@ -68,9 +111,10 @@ export function createCar(G, modelId, x, z, angle, kind) {
   parts.group.position.set(x, 0, z); parts.group.rotation.y = angle;
   G.scene.add(parts.group);
   const car = {
-    model, mesh: parts.group, wheels: parts.wheels, brakeMat: parts.brakeMat, lightBar: parts.lightBar, smoke: parts.smoke,
+    model, mesh: parts.group, wheels: parts.wheels, brakeMat: parts.brakeMat, lightBar: parts.lightBar, smoke: parts.smoke, sirenGlow: parts.sirenGlow,
     angle, speed: 0, health: 100, kind, stolen: false, dead: false,
     waypoint: null, brake: false, honkT: 0, smokeT: 0, flashT: Math.random() * 6,
+    callsign: null, roadblock: null, nmArm: false,
   };
   G.cars.push(car);
   return car;
@@ -86,7 +130,7 @@ export function spawnTraffic(G, count) {
     const lane = snapToRoad((G.rng() * 2 - 1) * CITY_EDGE);
     const along = (G.rng() * 2 - 1) * CITY_EDGE;
     const dirSign = G.rng() < 0.5 ? 1 : -1;
-    // Right-hand traffic: offset to the right of travel direction.
+    // Right-hand traffic: offset to the right of the travel direction.
     const x = horiz ? along : lane + dirSign * 2.1;
     const z = horiz ? lane - dirSign * 2.1 : along;
     if (dist2d(x, z, G.player.x, G.player.z) < 16) continue;
@@ -177,7 +221,7 @@ export function updateVehicles(G, dt) {
       const wp = car.waypoint;
       const dx = wp.x - p.x, dz = wp.z - p.z;
       const distC = Math.hypot(dx, dz);
-      // Lane offset: keep to the right side of the road through the intersection.
+      // Lane offset: keep to the right side of the road through junctions.
       const fx = Math.sin(car.angle), fz = Math.cos(car.angle);
       const tx = wp.x + fz * 2.1, tz = wp.z - fx * 2.1;
       const targetAngle = Math.atan2(tx - p.x, tz - p.z);
@@ -188,7 +232,7 @@ export function updateVehicles(G, dt) {
       else car.speed = Math.min(cruise, car.speed + 8 * dt);
       car.honkT -= dt;
       if (distC < 3.2) {
-        // At the intersection: mostly straight, sometimes a turn.
+        // At the junction: mostly straight on, sometimes a turn.
         const turn = G.rng();
         if (turn < 0.3) car.angle += Math.PI / 2; else if (turn < 0.42) car.angle -= Math.PI / 2;
         car.angle = Math.round(car.angle / (Math.PI / 2)) * (Math.PI / 2);
@@ -200,7 +244,7 @@ export function updateVehicles(G, dt) {
     } else if (car.kind === 'parked') {
       car.speed = 0;
     }
-    // Police movement lives in police.js; mission cars in missions.js. Both set angle/speed.
+    // Police movement lives in police.js; mission cars in missions.js.
     if (car.kind !== 'player') {
       p.x += Math.sin(car.angle) * car.speed * dt;
       p.z += Math.cos(car.angle) * car.speed * dt;
@@ -214,21 +258,46 @@ export function updateVehicles(G, dt) {
       const on = Math.sin(car.flashT) > 0;
       car.lightBar.children[0].material.color.setHex(on ? 0xff6666 : 0x881111);
       car.lightBar.children[1].material.color.setHex(on ? 0x113388 : 0x6688ff);
+      if (car.sirenGlow) car.sirenGlow.material.color.setHex(on ? 0xff2222 : 0x2255ff);
     }
-    // Damage smoke puffs. A fully transparent mesh still costs a draw call,
-    // so the smoke puff only enters the render list when it is visible.
+    // Damage smoke, sized to be read at a glance in a screenshot: a car
+    // under 35% health breathes a big, dense, pulsing plume.
     if (car.health < 35 && car.health > 0) {
       car.smokeT += dt;
-      car.smoke.material.opacity = 0.35 + 0.2 * Math.sin(car.smokeT * 9);
-      const s = 0.7 + 0.3 * Math.sin(car.smokeT * 5); car.smoke.scale.set(s, s, s);
+      car.smoke.material.opacity = 0.55 + 0.2 * Math.sin(car.smokeT * 9);
+      const s = 1.6 + 0.5 * Math.sin(car.smokeT * 5); car.smoke.scale.set(s, s, s);
     } else if (!car.dead) car.smoke.material.opacity = Math.max(0, car.smoke.material.opacity - dt);
     car.smoke.visible = car.smoke.material.opacity > 0.02;
-    // Despawn distant traffic, keep the world populated near Rio.
+    // Despawn distant traffic; keep the streets populated near Rio.
     if (car.kind === 'traffic' && dist2d(p.x, p.z, G.player.x, G.player.z) > 150) removeCar(G, car);
   }
   collideCars(G, dt);
   const trafficCount = G.cars.filter((c) => c.kind === 'traffic').length;
   if (trafficCount < 9 && G.cars.length < 18 && G.state === 'playing') spawnTraffic(G, 1);
+}
+// Near misses: a traffic car that slips through the 2.7–5.4 m band beside
+// a fast-driven player car without contact is armed; when the gap opens
+// again the pass counts — stat, respect, event line and toast, with a
+// chain multiplier for repeats inside four seconds. The same car cannot
+// score twice until it has been 26 m away.
+export function checkNearMiss(G, car) {
+  const spd = Math.abs(car.speed);
+  const px = car.mesh.position.x, pz = car.mesh.position.z;
+  for (const o of G.cars) {
+    if (o.kind !== 'traffic' || o.dead) continue;
+    const d = dist2d(px, pz, o.mesh.position.x, o.mesh.position.z);
+    if (spd > 14 && d > 2.7 && d < 5.4) o.nmArm = true;
+    else if (o.nmArm && d <= 2.7) o.nmArm = false; // contact is a crash, not a near miss
+    else if (o.nmArm && d >= 5.4 && d < 11) {
+      o.nmArm = false;
+      G.stats.nearMiss++;
+      G.respect += 10;
+      G.nmChain = (G.time - (G.nmChainT || -9) < 4) ? (G.nmChain || 0) + 1 : 1;
+      G.nmChainT = G.time;
+      G.hud.showEvent('NEAR MISS', `+10 RESPECT${G.nmChain > 1 ? ` · CHAIN ×${G.nmChain}` : ''}`);
+      if (G.hud.nearMissToast) G.hud.nearMissToast(G.nmChain);
+    } else if (d > 26) o.nmArm = false;
+  }
 }
 // Player driving: called from player.js with the shared game state.
 export function drivePlayerCar(G, car, dt) {
@@ -252,6 +321,7 @@ export function drivePlayerCar(G, car, dt) {
   p.z += Math.cos(car.angle) * car.speed * dt;
   collideWorld(G, car);
   car.mesh.rotation.y = car.angle;
+  checkNearMiss(G, car);
   // Running over a pedestrian is a crime and a tragedy.
   for (const ped of G.peds) {
     if (ped.dead) continue;

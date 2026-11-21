@@ -1,5 +1,7 @@
-// Palmshade Heat screenshots + FPS probe: serves the game, opens each staged
-// scene from shots.json, saves a 1280x800 JPEG, and reports sizes.
+// Palmshade Heat screenshot run: serves the game, opens each staged
+// scene listed in shots.json, saves a 1280x800 JPEG into screenshots/,
+// and reports each file's size against the 256 KiB cap. Finishes with
+// an FPS probe in the staged cover scene, the densest tableau.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -31,7 +33,7 @@ try {
     console.log(`${s.name}: ${bytes} bytes ${bytes <= 262144 ? 'OK' : 'OVER 256KiB'}${errs.length ? ' ERRORS: ' + errs.join(' | ') : ''}`);
     await page.close();
   }
-  // FPS: 30 seconds in the staged cover scene (densest composed tableau).
+  // FPS probe: 30 seconds in the staged cover scene.
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.goto('http://localhost:8080/?shot=cover&seed=1', { waitUntil: 'networkidle' });
   await page.waitForTimeout(1500);

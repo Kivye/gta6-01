@@ -1,6 +1,10 @@
-// Hitscan pistol with gentle aim assist, muzzle flash, recoil — and gang return fire.
+// Hitscan pistol with gentle aim assist, muzzle flash and recoil, gang
+// return fire — and the single damage gate for the player, where the
+// kevlar armour value absorbs its share before health is touched.
 import { clamp, dist2d } from './random.js';
+import { districtAt } from './config.js';
 import { removePed } from './pedestrians.js';
+import { policeCars, ensureCallsign } from './police.js';
 
 export function initCombat(G) {
   G.fireCd = 0; G.recoil = 0;
@@ -8,9 +12,13 @@ export function initCombat(G) {
 }
 export function damagePlayer(G, amount) {
   if (G.state !== 'playing' || G.player.dead) return;
-  G.player.health -= amount;
+  const P = G.player;
+  // Armour first: the vest eats what it can, health takes the rest.
+  const absorbed = Math.min(P.armour || 0, amount);
+  P.armour = (P.armour || 0) - absorbed;
+  P.health -= amount - absorbed;
   G.shake = Math.max(G.shake, 0.18);
-  if (G.player.health <= 0) { G.player.health = 0; G.onWasted(); }
+  if (P.health <= 0) { P.health = 0; G.onWasted(); }
 }
 function nearestHostileAhead(G, maxD, maxAngle) {
   const P = G.player;
@@ -30,10 +38,20 @@ function nearestHostileAhead(G, maxD, maxAngle) {
 export function tryFire(G) {
   if (G.fireCd > 0 || G.player.car) return;
   G.fireCd = 0.26; G.recoil = 1;
+  G.stats.shots++;
   G.audio.shot();
   G.hud.flashMuzzle();
   G.crime('shooting', G.player.x, G.player.z);
   G.danger = { x: G.player.x, z: G.player.z, t: G.time };
+  // Dispatch hears gunfire while Rio is wanted — at most one report per
+  // six seconds, filed by the nearest cruiser.
+  if (G.wanted > 0 && G.time - (G.lastShotReport || -9) > 6) {
+    G.lastShotReport = G.time;
+    const cops = policeCars(G).sort((a, b) =>
+      dist2d(G.player.x, G.player.z, a.mesh.position.x, a.mesh.position.z) -
+      dist2d(G.player.x, G.player.z, b.mesh.position.x, b.mesh.position.z));
+    G.reportIncident(cops.length ? ensureCallsign(G, cops[0]) : 'PSPD', `shots fired in ${districtAt(G.player.x, G.player.z)}`);
+  }
   const hit = nearestHostileAhead(G, 34, 0.65);
   const P = G.player;
   let ex = P.x + Math.sin(P.camYaw + Math.PI) * 30, ez = P.z + Math.cos(P.camYaw + Math.PI) * 30;
