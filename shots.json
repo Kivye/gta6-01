@@ -1,1 +1,1 @@
-[{"name":"1-cover.jpg","query":"?shot=cover&seed=1"},{"name":"2-onfoot.jpg","query":"?shot=onfoot&seed=1"},{"name":"3-stats.jpg","query":"?shot=stats&seed=1"},{"name":"4-mission.jpg","query":"?shot=mission&seed=1"}]
+{"shots":[{"file":"1-cover.jpg","stage":"cover"},{"file":"2-race.jpg","stage":"race"},{"file":"3-onfoot.jpg","stage":"onfoot"},{"file":"4-stats.jpg","stage":"stats"}]}

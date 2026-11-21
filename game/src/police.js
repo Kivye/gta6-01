@@ -1,242 +1,228 @@
-// The wanted system: witnessed crimes, cruiser callsigns, pursuit,
-// line-of-sight decay, busts — plus the two escalation layers, the
-// spotlight helicopter at three stars and the roadblock unit at four.
-// Dispatch incidents (thefts, shots, the heli, roadblocks) are reported
-// here into G.incident for the HUD's dispatch panel to read.
-import { TUNING, CITY_EDGE, districtAt } from './config.js';
-import { clamp, dist2d, angleLerp } from './random.js';
-import { createCar, removeCar } from './vehicles.js';
+'use strict';
 
-const CRIME_STARS = { theft: 1, hitPed: 2, shooting: 1, hitPolice: 2, crash: 1 };
-export function initPolice(G) {
-  G.wanted = 0; G.hiddenT = 0; G.decayT = 0; G.bustT = 0; G.lastSeenT = 0;
-  G.copSeq = 0; G.incident = null; G.sightSeen = false; G.peakWanted = 0;
-  G.rbNextAt = 0; G.heli = null; G.heliAnnounced = false;
-  G.reportIncident = (by, text) => { G.incident = { by, text, t: G.time }; };
-  G.crime = (type, x, z) => {
-    // A crime only counts when a cop or a crowd could plausibly witness
-    // it: near a police car, or (for loud crimes) anywhere at all.
-    const cops = policeCars(G);
-    const nearCop = cops.filter((c) => dist2d(x, z, c.mesh.position.x, c.mesh.position.z) < 42)
-      .sort((a, b) => dist2d(x, z, a.mesh.position.x, a.mesh.position.z) - dist2d(x, z, b.mesh.position.x, b.mesh.position.z))[0];
-    const crowdNear = G.peds.some((p) => !p.dead && dist2d(x, z, p.mesh.position.x, p.mesh.position.z) < 16);
-    const loud = type === 'shooting' || type === 'hitPed';
-    if (!nearCop && !crowdNear && !loud) return; // unwitnessed: the heat never hears of it
-    const add = CRIME_STARS[type] || 1;
-    G.wanted = clamp(Math.max(G.wanted + (G.wanted === 0 ? add : 1), add), 0, 5);
-    G.peakWanted = Math.max(G.peakWanted, G.wanted);
-    G.hiddenT = 0; G.decayT = 0;
-    G.danger = { x, z, t: G.time };
-    if (type === 'theft' && nearCop) {
-      G.reportIncident(ensureCallsign(G, nearCop), `vehicle theft reported in ${districtAt(x, z)}`);
-    }
-  };
-}
-export function setWanted(G, n) {
-  G.wanted = clamp(n, 0, 5);
-  if (n > 0) { G.hiddenT = 0; G.decayT = 0; G.peakWanted = Math.max(G.peakWanted, G.wanted); }
-}
-export function policeCars(G) { return G.cars.filter((c) => c.model.id === 'police' && !c.dead); }
-// Callsigns are given once, at spawn, from a rising sequence; staged
-// cruisers (screenshots) get theirs the first time the HUD looks.
-export function ensureCallsign(G, car) {
-  if (!car.callsign) { G.copSeq = (G.copSeq || 0) + 1; car.callsign = 'PALM-' + G.copSeq; }
-  return car.callsign;
-}
-function spawnCop(G) {
-  // Off-screen, snapped to a road, aimed at the player. Near the city
-  // edge the clamp can drag a spawn into view, so keep the farthest of
-  // a few tries: a cruiser must never materialise in plain sight.
-  let bx = 0, bz = 0, bd = -1;
-  for (let i = 0; i < 6; i++) {
-    const a = G.rng() * Math.PI * 2, r = 55 + G.rng() * 25;
-    let x = clamp(G.player.x + Math.sin(a) * r, -CITY_EDGE, CITY_EDGE);
-    let z = clamp(G.player.z + Math.cos(a) * r, -CITY_EDGE, CITY_EDGE);
-    const s = 26;
-    if (G.rng() < 0.5) x = Math.round(x / s) * s; else z = Math.round(z / s) * s;
-    const d = dist2d(x, z, G.player.x, G.player.z);
-    if (d > bd) { bd = d; bx = x; bz = z; }
-    if (d >= 58) break;
-  }
-  const car = createCar(G, 'police', bx, bz, Math.atan2(G.player.x - bx, G.player.z - bz), 'police');
-  ensureCallsign(G, car);
-  car.speed = 10;
-  return car;
-}
-function hasLineOfSight(G) {
-  const P = G.player;
-  for (const cop of policeCars(G)) {
-    const d = dist2d(P.x, P.z, cop.mesh.position.x, cop.mesh.position.z);
-    if (d > 55) continue;
-    // Cheap LOS: sample the segment; a building collider blocks the view.
-    let blocked = false;
-    for (let t = 0.15; t < 0.9; t += 0.15) {
-      const sx = cop.mesh.position.x + (P.x - cop.mesh.position.x) * t;
-      const sz = cop.mesh.position.z + (P.z - cop.mesh.position.z) * t;
-      for (const c of G.colliders) {
-        if (!c.soft && Math.abs(sx - c.x) < c.hw && Math.abs(sz - c.z) < c.hd) { blocked = true; break; }
+var COPS = {
+  units: [], swat: null, heli: null, spikes: [], roadblock: null,
+  seq: 0, spawnCd: 0, lastBlock: -99, lastSpike: 0, heliWasUp: false,
+  init: function () {
+    var grp = new THREE.Group();
+    function B(w, h, d, c, x, y, z) { var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), WORLD.mat(c)); m.position.set(x, y, z); grp.add(m); return m; }
+    B(2.3, 1.5, 4.8, 0x1d2f57, 0, 0, 0);
+    B(1.9, 1.0, 1.1, 0x9fd4e8, 0, -0.15, 2.7);
+    B(0.5, 0.5, 4.6, 0x1d2f57, 0, 0.25, -4.4);
+    B(0.16, 1.3, 0.9, 0x1d2f57, 0, 0.8, -6.4);
+    var tr = B(1.6, 0.08, 0.3, 0x222222, 0.35, 0.8, -6.4);
+    var rotor = B(10.5, 0.07, 0.55, 0x222222, 0, 1.0, 0);
+    B(0.14, 0.14, 3.6, 0x333333, -1.0, -1.15, 0);
+    B(0.14, 0.14, 3.6, 0x333333, 1.0, -1.15, 0);
+    var cone = new THREE.Mesh(new THREE.ConeGeometry(4.4, 14, 12, 1, true),
+      new THREE.MeshBasicMaterial({ color:0xfff2a8, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
+    cone.position.y = -7.6; grp.add(cone);
+    var disc = new THREE.Mesh(new THREE.CircleGeometry(4.3, 14),
+      new THREE.MeshBasicMaterial({ color:0xfff2a8, transparent: true, opacity: 0.22, depthWrite: false }));
+    disc.rotation.x = -Math.PI / 2; WORLD.scene.add(disc);
+    grp.visible = false; WORLD.scene.add(grp);
+    this.heli = { grp:grp, rotor: rotor, tailRotor: tr, disc: disc, active: false, ang: 0 };
+  },
+  setWanted: function (n) {
+    G.wanted = clamp(Math.round(n), 0, 5);
+    if (effWanted() >= 2) G._wasHigh = true;
+    SAVE.persist();
+  },
+  report: function (callsign, text) { G.incident = { callsign:callsign, text: text, until:G.time + 12 }; },
+  segBlocked: function (x1, z1, x2, z2) {
+    var d = dist2d(x1, z1, x2, z2), steps = Math.max(1, Math.floor(d / 6));
+    for (var i = 1; i < steps; i++) {
+      var x = lerp(x1, x2, i / steps), z = lerp(z1, z2, i / steps);
+      for (var j = 0; j < WORLD.solids.length; j++) {
+        var s = WORLD.solids[j];
+        if (x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1) return true;
       }
-      if (blocked) break;
     }
-    if (!blocked) return true;
-  }
-  return false;
-}
-// --- The helicopter -------------------------------------------------
-// A low-poly air unit from boxes: dark-blue body, glass nose, long tail
-// with a fin and tail rotor, a fast main rotor, skids, a translucent
-// spotlight cone and the disc of light where the cone lands.
-function buildHeli(G) {
-  const grp = new THREE.Group();
-  const navy = new THREE.MeshLambertMaterial({ color: 0x1d3f8f });
-  const glass = new THREE.MeshLambertMaterial({ color: 0x9fd4e8 });
-  const dark = new THREE.MeshLambertMaterial({ color: 0x22262c });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.5, 4.6), navy); grp.add(body);
-  const nose = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.1, 1.2), glass); nose.position.set(0, -0.1, 2.6); grp.add(nose);
-  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 4.6), navy); tail.position.set(0, 0.3, -4.2); grp.add(tail);
-  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.3, 0.7), navy); fin.position.set(0, 0.8, -6.3); grp.add(fin);
-  const tailRotor = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.5, 0.22), dark); tailRotor.position.set(0.35, 0.8, -6.3); grp.add(tailRotor);
-  const rotor = new THREE.Mesh(new THREE.BoxGeometry(8.4, 0.07, 0.55), dark); rotor.position.y = 1.05; grp.add(rotor);
-  for (const sx of [-1, 1]) {
-    const skid = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 3.6), dark);
-    skid.position.set(sx * 1.1, -1.05, 0.2); grp.add(skid);
-  }
-  G.scene.add(grp);
-  // The spotlight is its own little rig that tracks the player on the
-  // ground: a widening translucent cone plus a bright disc at its foot.
-  const spot = new THREE.Group();
-  const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 6, 14, 12, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }));
-  cone.position.y = 7; spot.add(cone);
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(5.6, 20),
-    new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.22, depthWrite: false }));
-  disc.rotation.x = -Math.PI / 2; disc.position.y = 0.09; spot.add(disc);
-  G.scene.add(spot);
-  return { group: grp, rotor, spot };
-}
-export function ensureHeli(G) {
-  if (!G.heli) {
-    G.heli = buildHeli(G);
-    if (!G.heliAnnounced) {
-      G.heliAnnounced = true;
-      G.reportIncident('AIR-1', 'spotlight on the suspect');
-      if (G.hud && G.hud.showEvent) G.hud.showEvent('AIR UNIT DEPLOYED', 'AIR-1 has you in the light');
+    return false;
+  },
+  spawnPoint: function () {
+    var pp = PLAYER.pos(), ang = rand(0, Math.PI * 2), d = rand(58, 78);
+    var x = clamp(pp.x + Math.sin(ang) * d, -104, 104), z = clamp(pp.z + Math.cos(ang) * d, -104, 104);
+    x = ROADS.reduce(function (p, c) { return Math.abs(c - x) < Math.abs(p - x) ? c : p; });
+    return { x:x, z:z };
+  },
+  addUnit: function () {
+    var sp = this.spawnPoint();
+    var car = CARS.spawn('sedan', sp.x, sp.z, rand(0, 6.28), 'police');
+    car.callsign = 'PALM-' + (++this.seq);
+    car.role = 'PURSUIT';
+    this.units.push(car); return car;
+  },
+  nearestUnit: function () {
+    var pp = PLAYER.pos(), best = null, bd = 1e9;
+    var all = this.units.concat(this.swat ? [this.swat] : []);
+    for (var i = 0; i < all.length; i++) {
+      var c = all[i]; if (c.dead) continue;
+      var d = dist2d(pp.x, pp.z, c.mesh.position.x, c.mesh.position.z);
+      if (d < bd) { bd = d; best = c; }
     }
-  }
-  return G.heli;
-}
-export function updateHeli(G, dt) {
-  const heli = G.heli; if (!heli) return;
-  const P = G.player;
-  const hx = P.x + Math.sin(G.time * 0.5) * 5;
-  const hz = P.z + Math.cos(G.time * 0.35) * 5;
-  heli.group.position.set(hx, 14, hz);
-  heli.group.rotation.y = P.car ? P.car.angle : P.angle;
-  heli.rotor.rotation.y += dt * 26;
-  heli.spot.position.set(P.x, 0, P.z);
-}
-function dropHeli(G) {
-  if (!G.heli) return;
-  G.scene.remove(G.heli.group); G.scene.remove(G.heli.spot);
-  G.heli = null; G.heliAnnounced = false;
-}
-// --- The roadblock ----------------------------------------------------
-// At four stars the farthest cruiser (past 35 m) is pulled off the chase
-// and sent to a point 55 m ahead of the player's heading, where it stops
-// sideways across the road. It stands down when the heat drops, after
-// 25 s, or once the player has slipped past it.
-function designateRoadblock(G, cops) {
-  const P = G.player;
-  const far = cops.filter((c) => !c.roadblock && dist2d(P.x, P.z, c.mesh.position.x, c.mesh.position.z) > 35)
-    .sort((a, b) => dist2d(P.x, P.z, b.mesh.position.x, b.mesh.position.z) - dist2d(P.x, P.z, a.mesh.position.x, a.mesh.position.z))[0];
-  if (!far) return;
-  far.roadblock = { phase: 'go', until: G.time + 25 };
-  G.rbNextAt = G.time + 45; // designation + hold + a 20 s cooldown before the next
-  G.reportIncident(ensureCallsign(G, far), 'roadblock moving into position');
-}
-function driveRoadblock(G, cop, dt) {
-  const P = G.player;
-  const heading = P.car ? P.car.angle : P.angle;
-  const bx = P.x + Math.sin(heading) * 55, bz = P.z + Math.cos(heading) * 55;
-  const p = cop.mesh.position;
-  const dBlock = dist2d(p.x, p.z, bx, bz);
-  const dPlayer = dist2d(P.x, P.z, p.x, p.z);
-  if (cop.roadblock.phase === 'go' && dBlock < 5) cop.roadblock.phase = 'hold';
-  if (cop.roadblock.phase === 'go') {
-    const targetAngle = Math.atan2(bx - p.x, bz - p.z);
-    cop.angle = angleLerp(cop.angle, targetAngle, clamp(dt * 2.2, 0, 1));
-    const topSpeed = cop.model.top * 0.95;
-    cop.speed = clamp(cop.speed + (topSpeed - cop.speed) * dt * 1.4, 0, topSpeed);
-  } else {
-    cop.speed = 0;
-    cop.angle = angleLerp(cop.angle, heading + Math.PI / 2, clamp(dt * 3, 0, 1));
-  }
-  const stoodDown = G.wanted < 4 || G.time > cop.roadblock.until || (cop.roadblock.phase === 'hold' && dPlayer < 5);
-  if (stoodDown) { cop.roadblock = null; G.rbNextAt = Math.max(G.rbNextAt, G.time + 20); }
-}
-export function updatePolice(G, dt) {
-  const P = G.player;
-  const cops = policeCars(G);
-  const want = G.wanted === 0 ? 0 : Math.min(TUNING.maxPolice, 1 + Math.floor(G.wanted * 0.9));
-  if (G.wanted > 0 && cops.length < want && G.spawnCd <= 0) { spawnCop(G); G.spawnCd = 2.5; }
-  G.spawnCd = Math.max(0, (G.spawnCd || 0) - dt);
-  // The helicopter rides at three stars and above.
-  if (G.wanted >= 3) { ensureHeli(G); updateHeli(G, dt); } else dropHeli(G);
-  if (G.wanted === 0) {
-    for (const cop of cops) if (dist2d(P.x, P.z, cop.mesh.position.x, cop.mesh.position.z) > 90) removeCar(G, cop);
-    G.audio.setSiren(false, dt);
-    G.sightSeen = false;
-    return;
-  }
-  // Line of sight drives both the decay clock and the HUD sight chip.
-  const seen = hasLineOfSight(G);
-  G.sightSeen = seen;
-  if (seen) { G.hiddenT = 0; G.decayT = 0; G.lastSeenT = G.time; }
-  else {
-    G.hiddenT += dt;
-    if (G.hiddenT > TUNING.decayDelay) {
-      G.decayT += dt;
-      if (G.decayT >= TUNING.decayStep) {
-        setWanted(G, G.wanted - 1);
-        G.decayT = 0; G.hiddenT = TUNING.decayDelay;
-        if (G.wanted === 0) {
-          // A clean escape after real heat pays out: stat + respect.
-          if (G.peakWanted >= 2) { G.stats.escapes++; G.respect += 60; }
-          G.peakWanted = 0;
-          G.missions?.onWantedCleared();
+    if (this.heli && this.heli.active) { var hd = dist2d(pp.x, pp.z, this.heli.grp.position.x, this.heli.grp.position.z); if (hd < bd) { bd = hd; best = 'heli'; } }
+    if (!best) return null;
+    var bx = best === 'heli' ? this.heli.grp.position.x : best.mesh.position.x;
+    var side = clamp((bx - pp.x) / 20, -1, 1);
+    return { d: bd, side: side, unit: best };
+  },
+  roleFor: function (car) {
+    if (car === (this.roadblock && this.roadblock.car)) return 'ROADBLOCK';
+    if (car === this.swat) return 'TACTICAL';
+    var pp = PLAYER.pos(), d = dist2d(pp.x, pp.z, car.mesh.position.x, car.mesh.position.z);
+    if (G.playerCar && d < 16) return 'RAMMING';
+    if (d > 55) return 'RESPONDING';
+    return 'PURSUIT';
+  },
+  dispatchRows: function () {
+    var pp = PLAYER.pos(), rows = [];
+    if (this.heli && this.heli.active) rows.push({ callsign:'AIR-1', role:'SPOTLIGHT', d: dist2d(pp.x, pp.z, this.heli.grp.position.x, this.heli.grp.position.z) });
+    var all = this.units.concat(this.swat ? [this.swat] : []);
+    var self = this;
+    all = all.filter(function (c) { return !c.dead; });
+    all.sort(function (a, b) { return dist2d(pp.x, pp.z, a.mesh.position.x, a.mesh.position.z) - dist2d(pp.x, pp.z, b.mesh.position.x, b.mesh.position.z); });
+    for (var i = 0; i < all.length; i++) {
+      var c = all[i];
+      rows.push({ callsign:c === this.swat ? 'SWAT-1' : c.callsign, role:self.roleFor(c), d: dist2d(pp.x, pp.z, c.mesh.position.x, c.mesh.position.z) });
+    }
+    return rows;
+  },
+  unitDown: function (car) {
+    var i = this.units.indexOf(car); if (i >= 0) this.units.splice(i, 1);
+    if (car === this.swat) this.swat = null;
+    if (this.roadblock && this.roadblock.car === car) this.roadblock = null;
+    if (!G.wantedLock) this.setWanted(Math.min(5, G.wanted + 1));
+  },
+  steerTo: function (car, tx, tz, dt, speedMul) {
+    var p = car.mesh.position;
+    var want = Math.atan2(tx - p.x, tz - p.z), diff = want - car.heading;
+    while (diff > Math.PI) diff -= Math.PI * 2; while (diff < -Math.PI) diff += Math.PI * 2;
+    var steer = clamp(diff * 1.8, -1, 1);
+    var th = Math.abs(diff) > 2.2 ? -0.5 : clamp(1 - Math.abs(diff) * 0.4, 0.35, 1) * (speedMul || 1);
+    CARS.stepCar(car, th, steer, dt, false);
+  },
+  update: function (dt) {
+    if (G.frozen) { this.updateHeli(dt, PLAYER.pos(), effWanted()); return; }
+    var w = effWanted(), pp = PLAYER.pos();
+    this.spawnCd -= dt;
+    var desired = [0, 1, 2, 3, 4, 4][w];
+    this.units = this.units.filter(function (c) { return !c.dead; });
+    if (this.units.length < desired && this.spawnCd <= 0 && !G.frozen) { this.addUnit(); this.spawnCd = 1.2; }
+    while (this.units.length > desired) {
+      var far = null, fd = -1;
+      for (var i = 0; i < this.units.length; i++) {
+        var d = dist2d(pp.x, pp.z, this.units[i].mesh.position.x, this.units[i].mesh.position.z);
+        if (d > fd && this.units[i] !== (this.roadblock && this.roadblock.car)) { fd = d; far = this.units[i]; }
+      }
+      if (!far) break;
+      CARS.remove(far); this.units.splice(this.units.indexOf(far), 1);
+    }
+
+    if (w >= 5 && !this.swat && !G.frozen) {
+      var sp = this.spawnPoint();
+      this.swat = CARS.spawn('van', sp.x, sp.z, 0, 'swat', 0x14161c);
+      this.swat.health = 280; this.swat.maxHp = 280;
+      this.swat.def = Object.assign({}, MODELS.van, { top: 39, accel: 17 });
+      this.swat.callsign = 'SWAT-1';
+    }
+    if (w < 5 && this.swat) { CARS.remove(this.swat); this.swat = null; }
+
+    var seen = false;
+    var all = this.units.concat(this.swat ? [this.swat] : []);
+    for (i = 0; i < all.length; i++) {
+      var c = all[i], cp = c.mesh.position;
+      if (dist2d(pp.x, pp.z, cp.x, cp.z) < 55 && !this.segBlocked(pp.x, pp.z, cp.x, cp.z)) { seen = true; break; }
+    }
+    if (this.heli && this.heli.active && dist2d(pp.x, pp.z, this.heli.grp.position.x, this.heli.grp.position.z) < 60) seen = true;
+    G.sight.seen = seen;
+    if (seen) { G.sight.hideT = 0; G.sight.decayT = 0; }
+    else if (w > 0) {
+      G.sight.hideT += dt;
+      if (G.sight.hideT > 5 && !G.wantedLock) {
+        G.sight.decayT += dt;
+        if (G.sight.decayT >= 9) {
+          G.sight.decayT = 0;
+          this.setWanted(G.wanted - 1);
+          if (G.wanted === 0 && G._wasHigh) { G.stats.escapes++; addRespect(60); G._wasHigh = false; HUD.showEvent('YOU LOST THEM', 'Escaped the PSPD'); SAVE.persist(); }
         }
       }
     }
+
+    var pv = G.playerCar ? { x:G.playerCar.mesh.position.x + Math.sin(G.playerCar.heading) * G.playerCar.speed * 0.55, z:G.playerCar.mesh.position.z + Math.cos(G.playerCar.heading) * G.playerCar.speed * 0.55 } : pp;
+    for (i = 0; i < this.units.length; i++) {
+      var u = this.units[i];
+      if (this.roadblock && this.roadblock.car === u) continue;
+      var dd = dist2d(pp.x, pp.z, u.mesh.position.x, u.mesh.position.z);
+      if (!G.playerCar && dd < 5.5) { CARS.stepCar(u, 0, 0, dt, false); continue; }
+      var ram = dd < 16 && G.playerCar;
+      this.steerTo(u, ram ? pv.x : pp.x, ram ? pv.z : pp.z, dt, w >= 4 ? 1.12 : 1);
+    }
+    if (this.swat && !this.swat.dead) this.steerTo(this.swat, pv.x, pv.z, dt, 1.15);
+    this.updateRoadblock(dt, pp);
+    this.updateHeli(dt, pp, w);
+    this.updateSpikes(dt);
+  },
+  updateRoadblock: function (dt, pp) {
+    var w = effWanted();
+    if (this.roadblock) {
+      var rb = this.roadblock, car = rb.car;
+      if (car.dead || w < 4 || G.time - rb.since > 25 || (rb.set && dist2d(pp.x, pp.z, car.mesh.position.x, car.mesh.position.z) < 13)) {
+        if (!car.dead) car.role = 'PURSUIT';
+        this.roadblock = null; this.lastBlock = G.time;
+      } else if (!rb.set) {
+        var d = dist2d(rb.tx, rb.tz, car.mesh.position.x, car.mesh.position.z);
+        if (d < 4) { rb.set = true; car.speed = 0; car.heading = rb.faceH; car.mesh.rotation.y = rb.faceH; }
+        else this.steerTo(car, rb.tx, rb.tz, dt, 1.15);
+      } else { car.speed = 0; car.mesh.rotation.y = rb.faceH; }
+      return;
+    }
+    if (w >= 4 && G.time - this.lastBlock > 30 && !G.frozen) {
+      var best = null, bd = 35;
+      for (var i = 0; i < this.units.length; i++) {
+        var c = this.units[i], d2 = dist2d(pp.x, pp.z, c.mesh.position.x, c.mesh.position.z);
+        if (d2 > bd) { bd = d2; best = c; }
+      }
+      if (best) {
+        var h = G.playerCar ? G.playerCar.heading : PLAYER.heading;
+        this.roadblock = { car:best, tx:pp.x + Math.sin(h) * 55, tz:pp.z + Math.cos(h) * 55, faceH:h + Math.PI / 2, since:G.time, set:false };
+        best.role = 'ROADBLOCK';
+        this.report(best.callsign, 'roadblock moving into position');
+      }
+    }
+  },
+  updateHeli: function (dt, pp, w) {
+    var h = this.heli; if (!h) return;
+    if (w >= 3) {
+      if (!h.active) {
+        h.active = true; h.grp.visible = true;
+        if (!this.heliWasUp) { this.heliWasUp = true; HUD.showEvent('AIR UNIT DEPLOYED', 'AIR-1 has you in the light'); this.report('AIR-1', 'spotlight on the suspect'); }
+      }
+      h.ang += dt * 0.35;
+      var hx = pp.x + Math.sin(h.ang) * 7, hz = pp.z + Math.cos(h.ang) * 7;
+      h.grp.position.set(hx, 14, hz);
+      h.grp.rotation.y = PLAYER.heading;
+      h.rotor.rotation.y += dt * 28; h.tailRotor.rotation.x += dt * 30;
+      h.disc.position.set(hx, 0.12, hz); h.disc.visible = true;
+    } else if (h.active) { h.active = false; h.grp.visible = false; h.disc.visible = false; }
+  },
+  updateSpikes: function (dt) {
+    var w = effWanted(), car = G.playerCar;
+    if (w >= 5 && car && Math.abs(car.speed) > 10 && G.time - this.lastSpike > 16 && !G.frozen) {
+      this.lastSpike = G.time;
+      var sx = car.mesh.position.x + Math.sin(car.heading) * 26, sz = car.mesh.position.z + Math.cos(car.heading) * 26;
+      var mesh = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.12, 0.8), WORLD.mat(0x22262c));
+      mesh.position.set(sx, 0.08, sz); mesh.rotation.y = car.heading; WORLD.scene.add(mesh);
+      this.spikes.push({ x:sx, z:sz, mesh:mesh, until:G.time + 40 });
+    }
+    for (var i = this.spikes.length - 1; i >= 0; i--) {
+      var s = this.spikes[i];
+      if (G.time > s.until) { WORLD.scene.remove(s.mesh); this.spikes.splice(i, 1); continue; }
+      if (car && !G.flatTyre && Math.abs(car.speed) > 5 && dist2d(car.mesh.position.x, car.mesh.position.z, s.x, s.z) < 2.3) {
+        G.flatTyre = true; HUD.showEvent('TYRE SHREDDED', 'Spike strip — fix it with Bo or a respray');
+        AUDIO.noiseHit(0.3, 0.5, 900, 'lowpass');
+        WORLD.scene.remove(s.mesh); this.spikes.splice(i, 1);
+      }
+    }
   }
-  G.wantedBlinking = !seen && G.hiddenT > 1.5;
-  // Roadblock designation at four stars and up.
-  if (G.wanted >= 4 && G.time >= G.rbNextAt && !cops.some((c) => c.roadblock)) designateRoadblock(G, cops);
-  let anyNear = false;
-  for (const cop of cops) {
-    const p = cop.mesh.position;
-    const d = dist2d(P.x, P.z, p.x, p.z);
-    if (d < 70) anyNear = true;
-    if (cop.roadblock) { driveRoadblock(G, cop, dt); continue; }
-    // Pursuit: aim at the player; close in a car chase, aim ahead to block.
-    let tx = P.x, tz = P.z;
-    if (P.car && d < 16) { tx = P.x + Math.sin(P.car.angle) * 7; tz = P.z + Math.cos(P.car.angle) * 7; }
-    const targetAngle = Math.atan2(tx - p.x, tz - p.z);
-    cop.angle = angleLerp(cop.angle, targetAngle, clamp(dt * (d < 8 ? 3.2 : 2), 0, 1));
-    const topSpeed = cop.model.top * (0.82 + G.wanted * 0.045);
-    const wantSpeed = d > 6 ? topSpeed : clamp((P.car ? Math.abs(P.car.speed) : 0) + 2, 4, topSpeed);
-    cop.speed = clamp(cop.speed + (wantSpeed - cop.speed) * dt * 1.4, 0, topSpeed);
-    if (d < 3.4 && P.car) cop.speed = Math.min(cop.speed, Math.abs(P.car.speed) + 1); // ram range: shoves come from car collisions
-  }
-  G.audio.setSiren(anyNear, dt);
-  // Bust check: grabbed on foot with a cop close, or boxed in while stopped.
-  let busting = false;
-  if (!P.car) busting = cops.some((c) => dist2d(P.x, P.z, c.mesh.position.x, c.mesh.position.z) < TUNING.bustRadius + 1.4);
-  else if (Math.abs(P.car.speed) < 0.8) {
-    const around = cops.filter((c) => dist2d(P.x, P.z, c.mesh.position.x, c.mesh.position.z) < 9).length;
-    busting = around >= 2 || (around >= 1 && G.wanted >= 4);
-  }
-  if (busting) {
-    G.bustT += dt;
-    if (G.bustT >= TUNING.bustTime) { G.bustT = 0; G.onBusted(); }
-  } else G.bustT = Math.max(0, G.bustT - dt * 2);
-}
+};

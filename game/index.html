@@ -1,92 +1,103 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Palmshade Heat</title>
-<link rel="icon" href="data:,">
-<link rel="stylesheet" href="./style.css">
+<title>PALMSHADE HEAT</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<canvas id="view"></canvas>
-<div id="hud" class="hidden">
-  <div id="topbar">
-    <div id="stars"></div>
-    <div id="cash"></div>
-    <div id="rank"></div>
-    <div id="storyline"></div>
-    <div id="progresswrap"><div id="progressbar"></div></div>
-    <div id="playclock"></div>
+<div id="game"></div>
+<div id="hud">
+  <div id="locBox" class="panel">
+    <div id="districtLbl">OLD TOWN</div>
+    <div id="standingLbl">NEUTRAL · 50</div>
+    <div class="bar thin"><div id="standingFill"></div></div>
   </div>
-  <div id="district"></div>
-  <div id="standing"></div>
-  <div id="missionpanel" class="hidden">
-    <div id="missionhead"></div>
-    <div id="missionpips"></div>
-    <div id="missionobj"></div>
-    <div id="missionnext"></div>
+  <div id="missionPanel" class="panel">
+    <div id="msnHead"></div>
+    <div id="msnPips"></div>
+    <div id="msnStage"></div>
+    <div id="msnObj"></div>
+    <div id="msnNext"></div>
   </div>
-  <div id="dispatchpanel" class="hidden">
-    <div id="dispatchhead"></div>
-    <div id="dispatchrows"></div>
-    <div id="dispatchincident"></div>
+  <div id="dispatchPanel" class="panel" style="display:none">
+    <div id="dspHead"></div>
+    <div id="dspRows"></div>
+    <div id="dspIncident" style="display:none"></div>
   </div>
-  <div id="radiobar"></div>
-  <div id="nmtoast" class="hidden"></div>
-  <div id="eventbanner" class="hidden"></div>
-  <div id="sightchip" class="hidden">IN SIGHT</div>
-  <div id="crewpanel"></div>
-  <div id="fencepanel" class="hidden"></div>
-  <div id="dialogbox" class="hidden">
-    <div id="dialogportrait"></div>
-    <div id="dialogbody"><div id="dialogname"></div><div id="dialogline"></div></div>
+  <div id="radioBar" class="panel"><span id="radioTxt"></span></div>
+  <div id="toast" style="display:none"><div id="toastTitle"></div><div id="toastSub"></div></div>
+  <div id="eventBanner" style="display:none"><div id="evTitle"></div><div id="evSub"></div></div>
+  <div id="rankBox" class="panel">
+    <div id="rankLbl"></div>
+    <div id="storyLbl"></div>
+    <div class="bar thin"><div id="storyFill"></div></div>
+    <div><span id="clockLbl">0:00</span> · <span id="moneyLbl">$0</span></div>
+    <div id="starsLbl"></div>
   </div>
-  <div id="armourlabel">ARMOUR</div>
-  <div id="armourwrap"><div id="armourbar"></div></div>
-  <div id="healthwrap"><div id="healthbar"></div></div>
-  <div id="vehicleinfo" class="hidden">
-    <div id="carname"></div>
-    <div id="condwrap"><div id="condbar"></div></div>
-    <div id="speedo">0</div><div id="speedunit">km/h</div>
-    <div id="gear">GEAR N</div>
+  <div id="sightChip" class="chip" style="display:none"></div>
+  <div id="crewPanel"></div>
+  <div id="racePanel" class="panel" style="display:none"></div>
+  <div id="fencePanel" class="panel" style="display:none"><div id="fenceTxt"></div></div>
+  <div id="dialogBox" style="display:none">
+    <div id="dlgPortrait"></div>
+    <div><div id="dlgName"></div><div id="dlgLine"></div></div>
   </div>
-  <div id="weaponstrip">
-    <div class="wslot active" id="wslot1">1 · PISTOL · ∞ · READY</div>
-    <div class="wslot" id="wslot2">2 · — EMPTY</div>
-    <div class="wslot" id="wslot3">3 · — EMPTY</div>
+  <div id="vehiclePanel" class="panel" style="display:none">
+    <div id="vehName"></div>
+    <div class="bar"><div id="vehCondFill"></div></div>
+    <div id="vehSpeedRow"><span id="vehSpeed">0</span><small> km/h</small> <span id="vehGear">N</span></div>
+    <div id="vehFlat" style="display:none">⚠ FLAT TYRE</div>
+    <div id="nitroRow">NITRO <div class="bar thin"><div id="nitroFill"></div></div></div>
   </div>
-  <div id="statspanel" class="hidden"></div>
-  <div id="prompt" class="hidden"></div>
-  <div id="timer"></div>
-  <canvas id="minimap" width="180" height="180"></canvas>
-  <div id="crosshair" class="hidden">+</div>
-  <div id="muzzle"></div>
-  <div id="banner" class="hidden"></div>
+  <div id="vitals">
+    <div class="vrow"><span>ARMOUR</span><div class="bar"><div id="armourFill"></div></div></div>
+    <div class="vrow"><span>HEALTH</span><div class="bar"><div id="healthFill"></div></div></div>
+  </div>
+  <div id="weaponStrip">
+    <div class="slot" id="slot1"><div class="wname"></div><div class="wammo"></div><div class="wstate"></div></div>
+    <div class="slot" id="slot2"><div class="wname"></div><div class="wammo"></div><div class="wstate"></div></div>
+    <div class="slot" id="slot3"><div class="wname"></div><div class="wammo"></div><div class="wstate"></div></div>
+  </div>
+  <canvas id="mmap" width="150" height="150"></canvas>
+  <div id="crosshair" style="display:none">+</div>
+  <div id="promptLbl"></div>
+  <div id="shopPanel" class="panel" style="display:none"><div id="shopTxt"></div></div>
+  <div id="garagePanel" class="panel" style="display:none"><div id="garageTxt"></div></div>
+  <div id="pauseWrap">
+    <div id="pausePanel" class="panel" style="display:none"><div id="pauseTxt"></div></div>
+    <button id="resumeBtn" style="display:none">RESUME</button>
+  </div>
 </div>
-<div id="overlay">
-  <div id="menu">
-    <h1 id="title">PALMSHADE<br><span>HEAT</span></h1>
-    <p id="tagline">Steal it. Fence it. Outrun the heat.</p>
-    <div id="menubtns">
-      <button id="btn-start">Start</button>
-      <button id="btn-continue">Continue</button>
-      <button id="btn-how">How to Play</button>
-      <button id="btn-reset">Reset Save</button>
-    </div>
-    <div id="howto" class="hidden">
-      <p><b>WASD</b> move &middot; <b>Mouse</b> orbit camera (click the game to lock) &middot; <b>Shift</b> run</p>
-      <p><b>E</b> steal / enter / exit car &middot; <b>F</b> fire pistol &middot; <b>R</b> change radio station &middot; <b>M</b> mute &middot; <b>Esc / P</b> pause</p>
-      <p><b>Z / X / C</b> call your crew: Nia swaps plates (-1 star), Bo quick-fixes your car, Juno watches the cruisers on the minimap. Abilities cool down after each use.</p>
-      <p>The blue bar is armour: a kevlar vest on a crate outside the police station tops it up, and it soaks damage before your health does. District standing under the district name rises when you finish jobs and fence cars there — and falls when the heat watches you steal.</p>
-      <p>Deliver stolen cars to a chop shop garage to earn cash. Follow the gold light column for story missions. Police raise your wanted stars for witnessed crimes; break line of sight to cool down. Death sends you to the hospital (-10% cash). Getting caught sends you to the station (-15% cash).</p>
-    </div>
-    <p id="menunote"></p>
+<div id="title">
+  <h1>PALMSHADE HEAT</h1>
+  <p class="tag">Eight jobs. One city. Every star earned.</p>
+  <div id="helpTxt">
+    <p><b>Move</b> WASD · <b>Enter / exit car</b> E · <b>Shoot</b> mouse / Space · <b>Drift</b> Space in car</p>
+    <p><b>Radio</b> R · <b>Mute</b> M · <b>Neon Night</b> N · <b>Pause / stats</b> P · <b>Nitro</b> Shift (in car)</p>
+    <p><b>Crew:</b> Nia — Swap Plates [Z] · Bo — Quick Fix [X] · Juno — Eyes Out [C]. Crew skills, the kevlar vest outside PSPD, and district standing change how Palmshade treats you.</p>
+    <p><b>Race</b> T at a start line · <b>Buy property</b> B · <b>Respray / favourite</b> Y / U at the garage · <b>Weapons</b> 1–3 or wheel · the Gun Van on the Marina boulevard sells the SMG, shotgun, refills and kevlar.</p>
   </div>
-  <div id="bigtext" class="hidden"></div>
-  <div id="subtext" class="hidden"></div>
-  <button id="btn-resume" class="hidden">Resume</button>
+  <button id="startBtn">START ENGINE</button>
 </div>
-<script src="./vendor/three.min.js"></script>
-<script type="module" src="./src/main.js"></script>
+<script src="vendor/three.min.js"></script>
+<script src="src/config.js"></script>
+<script src="src/random.js"></script>
+<script src="src/save.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/world.js"></script>
+<script src="src/vehicles.js"></script>
+<script src="src/pedestrians.js"></script>
+<script src="src/police.js"></script>
+<script src="src/player.js"></script>
+<script src="src/combat.js"></script>
+<script src="src/missions.js"></script>
+<script src="src/crew.js"></script>
+<script src="src/ultra.js"></script>
+<script src="src/hud.js"></script>
+<script src="src/input.js"></script>
+<script src="src/shots.js"></script>
+<script src="src/main.js"></script>
 </body>
 </html>

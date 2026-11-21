@@ -1,117 +1,107 @@
-// Deterministic staging for the four screenshots: ?shot=<scene>&seed=1
-// composes a tableau with a fixed camera and staged-but-real game state
-// (every HUD figure in these frames is read from the same state the
-// panels read in play). Normal play never calls this. Scenes: cover
-// (the boulevard chase), onfoot (the first steal), stats (the pause
-// career panel over a Heights chase) and mission (the fence quote).
-import { CHOP_SHOPS } from './config.js';
-import { createCar } from './vehicles.js';
-import { spawnPed } from './pedestrians.js';
-import { setWanted, ensureHeli, updateHeli } from './police.js';
+'use strict';
 
-export function parseShot() {
-  const q = new URLSearchParams(location.search);
-  const shot = q.get('shot');
-  if (!shot) return null;
-  return { scene: shot, seed: parseInt(q.get('seed') || '1', 10) || 1 };
-}
-function park(G, model, x, z, angle, kind = 'traffic') {
-  const car = createCar(G, model, x, z, angle, kind);
-  car.speed = 0;
-  return car;
-}
-export function stageScene(G, scene) {
-  const P = G.player;
-  G.shotMode = scene;
-  if (scene === 'cover') {
-    // The boulevard chase, photographed from the front: the hero Vesper
-    // GT runs at the camera down the Marina strip, two cruisers flank
-    // behind it, a third trails in smoking, a fourth answers from far
-    // off, and AIR-1 holds the light over all of it at four stars.
-    P.x = 0; P.z = 88; P.angle = 0;
-    const hero = park(G, 'sports', 0, 88, 0, 'player');
-    hero.stolen = true; hero.health = 88; hero.speed = 17;
-    P.car = hero; P.mesh.visible = false;
-    park(G, 'police', -2.2, 77, 0.08, 'police').speed = 15;
-    park(G, 'police', 2.2, 78.5, -0.08, 'police').speed = 15;
-    const hurt = park(G, 'police', 0, 64, 0, 'police');
-    hurt.speed = 13; hurt.health = 30; // the smoking unit: damage you can see
-    park(G, 'police', 0, 28, 0, 'police').speed = 12;
-    // Filler traffic on the cross streets, both sides of the boulevard.
-    park(G, 'taxi', -24, 96, Math.PI / 2); park(G, 'sedan', 26, 70, -Math.PI / 2);
-    park(G, 'convertible', -26, 64, 0); park(G, 'pickup', 26, 96, -Math.PI / 2);
-    for (let i = 0; i < 11; i++) spawnPed(G, -8 + i * 1.7, 96 + (i % 3));
-    setWanted(G, 4);
-    G.sightSeen = true; // four cruisers on an open boulevard: Rio is seen
-    ensureHeli(G); updateHeli(G, 0.4);
-    G.cash = 2450; G.completed = 2; G.respect = 300;
-    G.standing['Marina'] = 58;
-    G.missions.idx = 2; G.missions.stage = 0; G.missions.active = true;
-    G.hud.setObjective('Stop the rival car (ram it or shoot it), then grab the briefcase.', { x: 52, z: 26 });
-    P.camYaw = Math.PI; P.camPitch = 0.3;
-    G.camera.position.set(2.5, 3.6, 103); G.camera.lookAt(0, 4.2, 82);
-  } else if (scene === 'onfoot') {
-    // The first steal: Rio on foot in an Old Town street, the Regent
-    // Limo ahead of him wearing the objective column, mission 1 stage 0.
-    P.x = -24.5; P.z = 5; P.angle = 2.9; P.mesh.position.set(P.x, 0, P.z); P.mesh.rotation.y = P.angle;
-    const limo = park(G, 'limo', -26.5, -3, 0);
-    park(G, 'taxi', -26.5, 14, 0); park(G, 'compact', -14, 0, Math.PI / 2);
-    for (let i = 0; i < 8; i++) spawnPed(G, -31 + (i % 2) * 1.3, 10 - i * 2.4);
-    G.cash = 890; G.completed = 0; G.respect = 40;
-    G.missions.idx = 0; G.missions.stage = 0; G.missions.active = true;
-    G.hud.setObjective('Steal any car (walk up and press E).', { x: -26.5, z: -3 });
-    G.nearCar = limo;
-    P.camYaw = 2.9; P.camPitch = 0.3;
-    G.camera.position.set(-29.5, 2.8, 12.5); G.camera.lookAt(-25, 1.2, 0);
-  } else if (scene === 'stats') {
-    // The pause career panel over the Heights descent: hero cabrio, one
-    // cruiser on its tail, two stars — and a mid-story career staged as
-    // ordinary state for the panel to read.
-    P.x = 54; P.z = -30; P.angle = Math.PI / 2;
-    const hero = park(G, 'convertible', 54, -30, Math.PI / 2, 'player');
-    hero.speed = 31; hero.health = 76; P.car = hero; P.mesh.visible = false;
-    park(G, 'police', 43, -27.5, Math.PI / 2, 'police').speed = 28;
-    for (let i = 0; i < 4; i++) spawnPed(G, 46 + i * 3, -21);
-    setWanted(G, 2);
-    G.cash = 1730; G.completed = 3; G.respect = 940;
-    G.stats = { stolen: 14, fenced: 9, distKm: 23.6, topSpeed: 128, escapes: 5, shots: 41, earned: 6840, crewUsed: 6, nearMiss: 17 };
-    G.standing = { 'Marina': 58, 'Old Town': 74, 'The Heights': 41 };
-    G.missions.idx = 3; G.missions.stage = 0; G.missions.active = true;
-    G.hud.setObjective('Steal the Vesper GT from the Heights showroom.', { x: 54, z: -50 });
-    G.hud.showVehicle(hero);
-    P.camYaw = Math.PI / 2 + Math.PI; P.camPitch = 0.26;
-    G.camera.position.set(34, 6.5, -20); G.camera.lookAt(64, 1, -29);
-  } else if (scene === 'mission') {
-    // The moment before the sale: a stolen Meridian idles in the West
-    // Chop Shop bay at mission 1 stage 1, and the fence panel quoting
-    // its real price is the star — no completion banner. Four stars of
-    // heat stand behind it, one cruiser parked across Rio's way out as
-    // the roadblock, so the dispatch panel reads ROADBLOCK too.
-    const shop = CHOP_SHOPS[0];
-    P.x = shop.x; P.z = shop.z + 7; P.angle = Math.PI;
-    const hero = park(G, 'sedan', shop.x, shop.z + 7, Math.PI, 'player');
-    hero.stolen = true; hero.health = 82; hero.speed = 0;
-    P.car = hero; P.mesh.visible = false;
-    park(G, 'police', -26, -33, -0.9, 'police');
-    const block = park(G, 'police', shop.x, shop.z - 8, Math.PI / 2, 'police');
-    block.roadblock = { phase: 'hold', until: 1e9 };
-    G.rbNextAt = 1e9;
-    for (let i = 0; i < 3; i++) spawnPed(G, shop.x - 6 + i * 3, shop.z + 14);
-    setWanted(G, 4);
-    G.cash = 1250; G.completed = 0;
-    G.missions.idx = 0; G.missions.stage = 1; G.missions.active = true;
-    G.hud.setObjective('Deliver the stolen car to a chop shop garage.', { x: shop.x, z: shop.z + 7 });
-    P.camYaw = 0; P.camPitch = 0.3;
-    G.camera.position.set(shop.x - 7, 3.6, shop.z + 19); G.camera.lookAt(shop.x, 1.6, shop.z + 4);
+var SHOTS = {
+  prep: function () {
+    if (G.mode !== 'play') MAIN.startGame();
+    G.frozen = true; G.paused = false;
+    document.getElementById('pausePanel').style.display = 'none';
+    document.getElementById('resumeBtn').style.display = 'none';
+    COPS.setWanted(0); G.wantedLock = null; HUD.evUntil = -1; HUD.toastUntil = -1;
+    for (var i = COPS.units.length - 1; i >= 0; i--) CARS.remove(COPS.units[i]);
+    COPS.units = []; COPS.roadblock = null;
+    if (COPS.swat) { CARS.remove(COPS.swat); COPS.swat = null; }
+    G.playerCar = null; PLAYER.mesh.visible = true; G.dialogOverride = null;
+    ULTRA.race = null; ULTRA.gate.visible = false;
+  },
+  cop: function (x, z, h) {
+    var c = CARS.spawn('sedan', x, z, h, 'police');
+    c.callsign = 'PALM-' + (++COPS.seq); c.role = 'PURSUIT'; COPS.units.push(c); return c;
+  },
+  cover: function () {
+    this.prep();
+    ULTRA.nightCur = 1; ULTRA.nightTarget = 1; WORLD.applyNight(1); WORLD.rain.visible = false;
+    MSN.start(2); if (MSN.targetCar) { CARS.remove(MSN.targetCar); MSN.targetCar = null; }
+    G.money = 2450; G.storyDone = 5; G.respect = 640;
+    G.ownSmg = true; G.ownShotgun = true; G.ammoSmg = 120; G.ammoShot = 24; G.slot = 1; G.nitro = 65;
+    var hero = CARS.spawn('sport', 0, 84, 0, 'player', 0xd64541);
+    hero.health = Math.round(hero.maxHp * 0.88); hero.speed = 17; hero.stolen = true;
+    G.playerCar = hero; PLAYER.mesh.visible = false; PLAYER.heading = 0;
+    COPS.setWanted(5);
+    this.cop(-3.6, 74, 0); this.cop(3.6, 75.5, 0);
+    var hurt = this.cop(0, 64, 0); hurt.health = Math.round(hurt.maxHp * 0.3); hurt.refs.smoke.visible = true;
+    this.cop(0, 28, 0);
+    var rb = this.cop(7.5, 96, Math.PI / 2);
+    COPS.roadblock = { car:rb, tx:7.5, tz:96, faceH:Math.PI / 2, since:G.time, set:true }; rb.role = 'ROADBLOCK';
+    var sw = CARS.spawn('van', -7.5, 70, 0, 'swat', 0x14161c);
+    sw.health = 280; sw.maxHp = 280; sw.callsign = 'SWAT-1'; COPS.swat = sw;
+    COPS.heli.active = true; COPS.heli.grp.visible = true;
+    COPS.heli.grp.position.set(2, 14, 90); COPS.heli.disc.visible = true; COPS.heli.disc.position.set(2, 0.12, 90);
+    COPS.report('PALM-2', 'vehicle theft reported in Marina');
+    G.dialogOverride = { name:'Juno Reyes', role:'Lookout', color:'#8e44ad', line: 'AIR-1 has eyes on us — break the light or own it.' };
+    CARS.spawn('taxi', 26, 86, Math.PI / 2, 'traffic'); CARS.spawn('sedan', -26, 70, -Math.PI / 2, 'traffic'); CARS.spawn('cabrio', 52, 88, -Math.PI / 2, 'traffic');
+    var pedSpots = [[-14, 68], [18, 68], [-30, 88.5], [24, 89], [-8, 67], [30, 67], [12, 89], [-20, 89], [8, 67]];
+    for (var pi = 0; pi < pedSpots.length; pi++) PEDS.spawn(pedSpots[pi][0], pedSpots[pi][1]);
+    MAIN.camOverride = { x:9.5, y:5.6, z:108, lx:2, ly: 4.2, lz: 84 };
+  },
+  race: function () {
+    this.prep();
+    ULTRA.nightCur = 0; ULTRA.nightTarget = 0; WORLD.applyNight(0);
+    G.money = 2000; MSN.start(0); if (MSN.targetCar) { CARS.remove(MSN.targetCar); MSN.targetCar = null; }
+    var car = CARS.spawn('cabrio', 0, 77, Math.PI / 2, 'player', 0xf2b134);
+    G.playerCar = car; PLAYER.mesh.visible = false;
+    ULTRA.startRace(0, 500);
+    var r = ULTRA.race; r.idx = 1; r.t = 34.5;
+    car.mesh.position.set(48, 0, 44); car.heading = 2.92; car.speed = 24;
+    var rp = [[44, 47.5, 2.85], [52.5, 48, 3.0], [45.5, 37.5, 2.8]];
+    for (var i = 0; i < 3; i++) {
+      r.rivals[i].car.mesh.position.set(rp[i][0], 0, rp[i][1]);
+      r.rivals[i].car.heading = rp[i][2]; r.rivals[i].idx = 1;
+    }
+    ULTRA.placeGate();
+    G.nitro = 55; G.slot = 1;
+    HUD.showToast('NEAR MISS ×2', '+10 RESPECT'); HUD.flashSpeedo();
+    MAIN.camOverride = { x:28, y:7.2, z:58, lx: 48, ly: 1.4, lz: 43 };
+  },
+  onfoot: function () {
+    this.prep();
+    ULTRA.nightCur = 0; ULTRA.nightTarget = 0; WORLD.applyNight(0);
+    MSN.start(0); if (MSN.targetCar) { CARS.remove(MSN.targetCar); MSN.targetCar = null; }
+    G.ownSmg = true; G.ownShotgun = true; G.ammoSmg = 120; G.ammoShot = 24; G.slot = 3; G.armour = 60;
+    PLAYER.mesh.position.set(8.5, 0, 82); PLAYER.heading = 0.72; MAIN.camYaw = 0.72;
+    COPS.setWanted(2);
+    this.cop(26, 80, -Math.PI / 2); this.cop(-14, 78, Math.PI / 2);
+    COPS.report('PALM-1', 'shots fired in Marina');
+    PEDS.scatter(3, 16, 74, 8);
+    MAIN.camOverride = { x:1.5, y:2.6, z:74.5, lx: 9, ly: 1.3, lz: 84 };
+  },
+  stats: function () {
+    this.prep();
+    ULTRA.nightCur = 0; ULTRA.nightTarget = 0; WORLD.applyNight(0);
+    MSN.current = 8; MSN.stage = 0; WORLD.setMarker(0, 0, false);
+    G.storyDone = 8; G.respect = 1240; G.money = 12840;
+    G.standing = { 'Marina': 85, 'Old Town': 78, 'The Heights': 92 };
+    G.props = ['pier', 'yard', 'pent'];
+    G.stats = { stolen:14, sold: 9, distKm: 412.5, topKmh: 148, escapes: 6, shots: 233, earned: 48650, crew: 17, nearMiss: 31, stunts: 8, racesWon: 3 };
+    var hero = CARS.spawn('cabrio', 54, -30, Math.PI / 2, 'player', 0xec7f2d);
+    hero.health = Math.round(hero.maxHp * 0.76); hero.speed = 31;
+    G.playerCar = hero; PLAYER.mesh.visible = false;
+    COPS.setWanted(4);
+    this.cop(43, -27.5, Math.PI / 2);
+    var rb = this.cop(78, -31, 0);
+    COPS.roadblock = { car:rb, tx:78, tz:-31, faceH:0, since:G.time, set:true }; rb.role = 'ROADBLOCK';
+    MAIN.camOverride = { x:36, y:4.2, z:-25, lx: 66, ly: 1.5, lz: -28 };
+    MAIN.setPaused(true);
   }
-  G.hud.show();
-  G.hud.update(0.016);
-  if (scene === 'stats') {
-    // Freeze on the pause screen: the career panel over the chase. The
-    // minimap gets an explicit draw — paused frames stop the HUD tick
-    // that normally paints it every second frame.
-    G.hud.drawMinimap();
-    G.state = 'paused';
-    G.hud.showStats(G);
-  }
-}
+};
+window.PS = {
+  G: G, CARS: CARS, COPS: COPS, MSN: MSN, CREW: CREW, ULTRA: ULTRA, GUNS: GUNS,
+  PLAYER: PLAYER, WORLD: WORLD, AUDIO: AUDIO,
+  start: function () { MAIN.startGame(); },
+  stage: function (name) { SHOTS[name](); },
+  teleport: function (x, z) {
+    if (G.playerCar) { G.playerCar.mesh.position.set(x, 0, z); G.playerCar.speed = 0; }
+    else PLAYER.mesh.position.set(x, 0, z);
+  },
+  key: function (code) { MAIN.onKey(code); },
+  errors: function () { return window.__errors || []; }
+};

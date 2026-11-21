@@ -1,334 +1,238 @@
-// Palmshade Heat playtest: drives the real game in headless Chromium and
-// checks the full loop — menu, walking, stealing, driving, wanted,
-// missions, death, bust — plus the narrative-HUD round: mission panel,
-// round minimap, radio, dispatch with callsigns and the helicopter,
-// sight chip, roadblock, crew abilities, standing, respect, armour and
-// the vest, the fence quote, near misses with their toast, damage smoke
-// and the pause career panel. This VM renders WebGL in software at a
-// variable 4–7 fps and the loop clamps dt, so game time runs slower
-// than real time: every time-sensitive check below POLLS game state
-// with a generous real-time cap instead of trusting a fixed sleep.
-import { createRequire } from 'node:module';
-import { spawn, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+// Playtest — 93 pemeriksaan.
+import { readdir, stat } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { serveDir, launchPage, sleep } from './cdp.mjs';
 
-const require2 = createRequire('/home/hatch/workspace/makefun/entries/makefun-frontend-01/scratch/shots/node_modules/playwright-core/package.json');
-const { chromium } = require2('playwright-core');
-const exeCandidates = [
-  process.env.HOME + '/.cache/ms-playwright/chromium-1255/chrome-linux/chrome',
-  process.env.HOME + '/.cache/ms-playwright/chromium-1148/chrome-linux/chrome',
-  process.env.HOME + '/.cache/ms-playwright/chromium-1255/chrome-linux64/chrome',
-];
-const exe = exeCandidates.find((p) => existsSync(p));
-if (!exe) { console.error('NO_CHROMIUM'); process.exit(2); }
+const root = dirname(fileURLToPath(import.meta.url));
+let pass = 0, fail = 0;
+function ok(c, name) { if (c) { pass++; console.log('PASS  ' + name); } else { fail++; console.log('FAIL  ' + name); } }
 
-const server = spawn('node', ['serve.ts'], { cwd: new URL('.', import.meta.url).pathname, stdio: 'pipe' });
-await new Promise((r) => setTimeout(r, 1200));
-const results = [];
-const check = (name, ok, extra = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name} ${extra}`); };
-const browser = await chromium.launch({ executablePath: exe, args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
-const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-const errors = [];
-page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
-page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
-page.on('response', (r) => { if (r.status() >= 400) errors.push('http ' + r.status() + ' ' + r.url()); });
-// Every evaluate callback binds G itself — window.__game is the game's debug handle.
-const ev = (fn) => page.evaluate(fn);
-const G = (expr) => page.evaluate(new Function('const G = window.__game; return (' + expr + ')'));
-// Poll a boolean game expression until it holds or the cap runs out.
-const poll = async (expr, tries = 40, step = 500) => {
-  for (let i = 0; i < tries; i++) { if (await G(expr)) return true; await page.waitForTimeout(step); }
-  return G(expr);
-};
+const srv = await serveDir(join(root, 'game'), 8081);
+const page = await launchPage(800, 450);
+const E = (expr) => page.ev(expr);
+const B = async (expr) => !!(await E(expr));
+const OB = async (expr, name) => ok(await B(expr), name);
+const txt = (id) => E("document.getElementById('" + id + "').textContent");
+const disp = (id) => E("document.getElementById('" + id + "').style.display");
+async function waitFor(expr, ms) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) { if (await B(expr)) return true; await sleep(200); }
+  return false;
+}
+const WF = async (expr, name, ms) => ok(await waitFor(expr, ms || 6000), name);
 
 try {
-  await page.goto('http://localhost:8080/', { waitUntil: 'networkidle' });
-  await page.waitForTimeout(1500);
-  check('page loads, no errors yet', errors.length === 0, errors.join(' | '));
-  check('start screen visible', await page.isVisible('#menu'));
-  check('title shows Palmshade Heat', (await page.textContent('#title')).includes('PALMSHADE'));
-  await ev(() => localStorage.clear());
-  await page.click('#btn-start');
-  await page.waitForTimeout(600);
-  check('Start begins play', await G('G.state') === 'playing');
-  check('mission 1 active', await G('G.missions.active && G.missions.idx === 0'));
-  // The narrative HUD round: the mission panel names the live mission,
-  // and the minimap computes as a round disc.
-  check('mission panel shows the active mission', await poll("(() => { const el = document.getElementById('missionpanel'); return el && !el.classList.contains('hidden') && el.textContent.includes('MISSION 1/5'); })()", 20, 300));
-  check('minimap is round', await G("getComputedStyle(document.getElementById('minimap')).borderRadius") === '50%');
-  // Walk for a bit and confirm Rio actually moves.
-  const p0 = await G('({x: G.player.x, z: G.player.z})');
-  await page.keyboard.down('w');
-  let walked = 0;
-  for (let i = 0; i < 80 && walked <= 3; i++) {
-    await page.waitForTimeout(500);
-    const p1 = await G('({x: G.player.x, z: G.player.z})');
-    walked = Math.hypot(p1.x - p0.x, p1.z - p0.z);
+  await page.goto('http://localhost:8081/index.html');
+  await E('localStorage.clear()');
+  await page.goto('http://localhost:8081/index.html');
+  await E('new Promise(r => { const t = setInterval(() => { if (window.PS && window.WORLD && WORLD.renderer) { clearInterval(t); r(1); } }, 100); })');
+  await E('window.$d = (i) => document.getElementById(i)');
+  await sleep(600);
+
+  await OB('PS.errors().length === 0', 'boot: nol error halaman');
+  ok(await disp('title') !== 'none', 'judul tampil');
+  await E('PS.start()'); await sleep(300);
+  await OB("G.mode === 'play'", 'mode play');
+  await OB('PLAYER.mesh.visible && !G.playerCar', 'Rio berjalan kaki');
+  ok((await txt('moneyLbl')) === '$350', 'label uang = $350 state');
+  await OB("getComputedStyle(document.getElementById('mmap')).borderRadius === '50%'", 'minimap bulat');
+  ok((await txt('districtLbl')) === 'OLD TOWN', 'distrik spawn Old Town');
+  ok((await txt('standingLbl')).includes('NEUTRAL · 50'), 'standing NEUTRAL 50');
+  const radio = await txt('radioTxt');
+  ok(radio.includes('PALM 98.4') && radio.includes('Neon Palms'), 'radio PALM 98.4 + Neon Palms');
+  await page.key('KeyR', true); await page.key('KeyR', false);
+  await WF("AUDIO.station === 1 && $d('radioTxt').textContent.includes('SOL 101.9')", 'R: stasiun -> SOL 101.9');
+  ok(await disp('missionPanel') === 'block' && (await txt('msnHead')).includes('REGENT RUN'), 'panel misi 1 Regent Run');
+  await OB("document.querySelectorAll('#msnPips .pip').length === 2", 'pip misi 1 = 2');
+  ok(await disp('dialogBox') === 'flex' && (await txt('dlgName')).includes('Mara Vale'), 'dialog: Mara Vale');
+  ok((await txt('dlgLine')).includes('money on wheels'), 'dialog = intro misi 1');
+  await OB('WORLD.marker.visible', 'kolom emas di limo');
+  const s1 = await E("document.getElementById('slot1').textContent");
+  ok(s1.includes('PISTOL') && s1.includes('∞') && s1.includes('READY'), 'slot1 PISTOL ∞ READY');
+  const s2 = await E("document.getElementById('slot2').textContent");
+  ok(s2.includes('MICRO SMG') && s2.includes('LOCKED'), 'slot2 SMG LOCKED');
+  ok((await E("document.getElementById('slot3').textContent")).includes('PUMP SHOTGUN'), 'slot3 PUMP SHOTGUN');
+
+  const z0 = await E('PLAYER.mesh.position.z');
+  await E('INPUT.keys.KeyW = true');
+  const walkOk = await waitFor('PLAYER.mesh.position.z > ' + (z0 + 1), 6000);
+  await E('INPUT.keys.KeyW = false');
+  ok(walkOk, 'jalan kaki menggerakkan Rio');
+  await E('PS.teleport(-24.2, -3)');
+  await OB("PLAYER.nearestCar() && PLAYER.nearestCar().car.def.name === 'Regent Limo'", 'mobil terdekat = limo');
+  await page.key('KeyE', true); await page.key('KeyE', false); await sleep(300);
+  await OB("!!G.playerCar && G.playerCar.def.name === 'Regent Limo'", 'E masuk limo');
+  await OB('G.stats.stolen === 1', 'stats.stolen = 1');
+  await OB("MSN.stage === 1 && G.playerCar.stolen === true", 'stage naik + mobil curian');
+  await WF("$d('vehiclePanel').style.display === 'block' && $d('vehName').textContent.includes('Regent Limo')", 'panel kendaraan limo');
+  await E('PS.teleport(-26, -3)'); await E('G.playerCar.heading = 0');
+  await E('INPUT.keys.KeyW = true');
+  const spdOk = await waitFor('G.playerCar.speed > 3', 6000);
+  await E('INPUT.keys.KeyW = false');
+  ok(spdOk, 'kecepatan limo > 3');
+  await WF("$d('vehGear').textContent === 'D'", 'gigi D saat maju');
+  await E('PS.teleport(-34, -13)');
+  await WF("$d('fencePanel').style.display === 'block' && $d('fenceTxt').textContent.includes('West Chop Shop')", 'panel fence <25m West Chop');
+  await OB("document.getElementById('fenceTxt').textContent.includes('$' + MSN.fenceValue(G.playerCar).toLocaleString('en-US'))", 'fence = fenceValue');
+  await E('PS.teleport(-52, -13)'); await E('G.playerCar.speed = 0');
+  await WF('MSN.current === 1', 'deliver fence: misi 1 tuntas');
+  await OB('G.stats.sold === 1', 'stats.sold = 1');
+  await OB('G.respect >= 120', 'respect >= 120');
+  await WF("$d('rankLbl').textContent.includes('RUNNER')", 'gelar Runner tampil');
+  await OB("G.standing['Old Town'] > 50", 'standing Old Town > 50');
+  await WF("$d('storyLbl').textContent.includes('STORY 1/8')", 'STORY 1/8');
+
+  await E('G.armour = 50'); await E('PLAYER.hurt(30)');
+  await OB('G.armour === 20 && G.health === 100', 'armour serap 50->20');
+  await E('PS.teleport(18.5, 8)');
+  await WF('G.armour === 100', 'kevlar -> armour 100');
+  await OB('WORLD.vest.available === false', 'rompi hilang');
+
+  await E('COPS.setWanted(3)');
+  ok(await waitFor('COPS.heli.active', 4000), 'wanted 3: AIR-1 naik');
+  await WF("$d('dispatchPanel').style.display === 'block' && $d('dspHead').textContent.includes('PSPD DISPATCH')", 'dispatch PSPD DISPATCH');
+  await WF("$d('dspRows').textContent.includes('AIR-1')", 'dispatch ada AIR-1');
+  await WF("['IN SIGHT','LOSING THEM'].some(s => $d('sightChip').textContent.includes(s))", 'chip sight');
+  await E('COPS.setWanted(4)');
+  ok(await waitFor('!!COPS.roadblock', 9000), 'roadblock ditunjuk');
+  await WF("$d('dspRows').textContent.includes('ROADBLOCK')", 'dispatch: ROADBLOCK');
+  await E('COPS.setWanted(0)');
+  await WF('!COPS.heli.active', 'wanted 0: heli turun');
+
+  await E("(function(){ var c = CARS.spawn('sedan', 16, 14, 0, 'parked'); PLAYER.enterCar(c); return true; })()");
+  await E('COPS.setWanted(2)'); await E("PS.key('KeyZ')"); await sleep(200);
+  await OB('G.wanted === 1', 'SWAP PLATES 2->1');
+  await OB("CREW.stateLabel(0) !== 'READY'", 'cooldown Nia berjalan');
+  await E('G.playerCar.health = 40'); await E("PS.key('KeyX')"); await sleep(200);
+  await OB('G.playerCar.health === 85', 'QUICK FIX 40->85');
+  await E('G.flatTyre = true; CREW.members[1].cdUntil = 0'); await E("PS.key('KeyX')"); await sleep(200);
+  await OB('G.flatTyre === false && G.playerCar.health === 100', 'QUICK FIX pulihkan ban');
+  await E("PS.key('KeyC')"); await sleep(200);
+  await OB('G.eyesOutUntil > G.time', 'EYES OUT aktif');
+  await OB('G.stats.crew >= 3', 'stats.crew >= 3');
+
+  await E("(function(){ for (var i = CARS.list.length - 1; i >= 0; i--) { var c = CARS.list[i]; if (c.kind === 'traffic' && Math.abs(c.mesh.position.x) < 30 && Math.abs(c.mesh.position.z - 7) < 30) CARS.remove(c); } CARS.spawn('compact', 3, 14, 0, 'parked'); G.playerCar.mesh.position.set(0, 0, -8); G.playerCar.heading = 0; G.playerCar.speed = 0; G.nitro = 10; return true; })()");
+  await E('INPUT.keys.KeyW = true');
+  const nmOk = await waitFor('G.stats.nearMiss >= 1', 6000);
+  await E('INPUT.keys.KeyW = false');
+  ok(nmOk, 'near-miss terhitung');
+  await OB("G.lastToast.indexOf('NEAR MISS') === 0", 'toast NEAR MISS');
+  await OB('G.nitro >= 25', 'near-miss +15 nitro');
+  await E("(function(){ var c = CARS.spawn('compact', 8, 30, 0, 'parked'); CARS.damage(c, 80); window.__smk = c; return true; })()");
+  await OB('window.__smk.refs.smoke.visible === true && window.__smk.health === 20', 'mobil health 20 berasap');
+  await page.key('KeyP', true); await page.key('KeyP', false); await sleep(300);
+  ok(await B('G.paused') && await disp('pausePanel') === 'block', 'jeda terbuka');
+  ok((await txt('pauseTxt')).includes('Cars stolen'), 'jeda: baris mobil dicuri');
+  const ptxt = await txt('pauseTxt');
+  ok(ptxt.includes('Respect') && ptxt.includes('Runner'), 'jeda: Respect + gelar');
+  await page.key('KeyP', true); await page.key('KeyP', false); await sleep(200);
+  await OB('!G.paused', 'jeda tertutup');
+
+  await E("if (G.playerCar) PLAYER.exitCar(); PS.teleport(12, 82)");
+  await WF("$d('shopPanel').style.display === 'block'", 'panel Gun Van tampil');
+  await E('G.money = 5000'); await E("PS.key('Digit1')"); await sleep(200);
+  await OB('G.ownSmg && G.ammoSmg === 120 && G.money === 4200', 'beli SMG $800');
+  await E("PS.key('Digit2')"); await sleep(200);
+  await OB('G.ownShotgun && G.ammoShot === 24 && G.money === 3000', 'beli Shotgun $1200');
+  await E('G.ammoSmg = 37'); await E("PS.key('Digit3')"); await sleep(200);
+  await OB('G.ammoSmg === 120 && G.money === 2850', 'refill $150 penuh');
+  await E('G.armour = 10'); await E("PS.key('Digit4')"); await sleep(200);
+  await OB('G.armour === 100 && G.money === 2550', 'kevlar $300 -> 100');
+  await E('PS.teleport(0, 60)'); await waitFor('!G.shopOpen', 4000); await E("PS.key('Digit2')");
+  await WF("G.slot === 2 && $d('slot2').className.includes('active')", 'slot 2 aktif');
+  await E('INPUT.mouseDown = true');
+  const fireOk = await waitFor('G.ammoSmg < 120', 5000);
+  await E('INPUT.mouseDown = false');
+  ok(fireOk, 'tembak SMG: ammo turun');
+  await E("(function(){ var c = CARS.spawn('sedan', 2, 62, 0, 'parked'); PLAYER.enterCar(c); return true; })()");
+  const ammoBeforeDb = await E('G.ammoSmg');
+  await E('INPUT.mouseDown = true');
+  const dbOk = await waitFor('G.ammoSmg < ' + ammoBeforeDb, 4000);
+  await E('INPUT.mouseDown = false');
+  ok(dbOk, 'drive-by SMG: ammo turun');
+  await E("PS.key('Digit3')"); await sleep(100);
+  await E('INPUT.mouseDown = true');
+  const sgOk = await waitFor("G.lastEvent === 'NO DRIVE-BY'", 4000);
+  await E('INPUT.mouseDown = false');
+  ok(sgOk && await B('G.ammoShot === 24'), 'drive-by shotgun ditolak');
+  await E("PS.key('KeyE')"); await sleep(300);
+  await E('INPUT.mouseDown = true');
+  const shellOk = await waitFor('G.ammoShot === 23', 5000);
+  await E('INPUT.mouseDown = false');
+  ok(shellOk, 'shotgun: 1 tembak 1 selongsong');
+  await OB('GUNS.damageAt(3, 30) < GUNS.damageAt(3, 5)', 'shotgun falloff jarak');
+  await E('G.ammoSmg = 50'); await E('(function(){ var p = PLAYER.mesh.position; GUNS.dropPickup(p.x, p.z); GUNS.pickups[GUNS.pickups.length - 1].kind = "smg"; return true; })()');
+  ok(await waitFor('G.ammoSmg === 80', 3000), 'pickup ammo +30');
+
+  await E('MSN.start(5)'); await sleep(300);
+  await OB("MSN.defs[5].name === 'Harbor Heist' && !!MSN.targetCar && MSN.targetCar.key === 'truck'", 'misi 6: truk muncul');
+  await OB('MSN.escorts.length === 2', '2 pengawal truk');
+  await E('MSN.start(6)'); await sleep(200);
+  await OB('G.wantedLock === 4', 'misi 7: lock 4 bintang');
+  await E('MSN.start(7)'); await sleep(200);
+  await OB("MSN.defs[7].name === 'Palmshade Takeover' && !!MSN.targetCar && !!MSN.targetCar.commander", 'misi 8: komandan muncul');
+  await E('CARS.damage(MSN.targetCar, 9999)');
+  await WF('MSN.stage === 1 && G.wantedLock === 5', 'komandan tumbang: lock 5');
+  ok(await waitFor('!!COPS.swat', 4000), 'SWAT-1 turun');
+  await E('PLAYER.mesh.position.set(-16, 0, 100)');
+  await WF('MSN.current === 8 && G.storyDone === 8', 'STORY 8/8 tuntas');
+  await OB("G.respect >= 1200 && respectTitle(G.respect) === 'Palmshade Legend'", 'gelar Legend');
+
+  await E('G.money = 2000');
+  await E("(function(){ COPS.setWanted(0); var c = CARS.spawn('cabrio', -52, -1, Math.PI, 'parked'); PLAYER.enterCar(c); return true; })()");
+  await E("PS.key('KeyT')"); await sleep(300);
+  await OB('!!ULTRA.race && G.money === 1500', 'balapan mulai, bet terpotong');
+  await WF("$d('racePanel').style.display === 'block' && $d('crewPanel').style.display === 'none'", 'panel race ganti panel kru');
+  await WF("$d('racePanel').textContent.includes('POS') && $d('racePanel').textContent.includes('CHECKPOINT')", 'panel race POS+CP');
+  await E('G.nitro = 80'); await E('INPUT.keys.ShiftLeft = true; INPUT.keys.KeyW = true');
+  const nitroOk = await waitFor('G.nitro < 80', 5000);
+  const nitroAfter = await E('G.nitro');
+  await E('INPUT.keys.ShiftLeft = false; INPUT.keys.KeyW = false');
+  ok(nitroOk && nitroAfter < 80, 'nitro terkuras oleh Shift');
+  await E("(function(){ ULTRA.race.idx = ULTRA.race.def.pts.length - 1; G.playerCar.mesh.position.set(-52, 0, 0); G.playerCar.speed = 0; return true; })()");
+  await WF('!ULTRA.race && G.money === 2500 && G.stats.racesWon === 1', 'menang race: bayar 2x');
+
+  await E('G.money = 10000'); await E('PS.teleport(-44, 92)'); await E("PS.key('KeyB')"); await sleep(200);
+  await OB("G.props.includes('pier') && G.money === 6000", 'beli Pier Club');
+  await E('ULTRA.incomeT = 59.5');
+  await WF('G.money > 6000', 'income properti jalan');
+  await E('PS.teleport(6, 45)'); await E('G.money = 1000; G.flatTyre = true'); await E("PS.key('KeyY')"); await sleep(200);
+  await OB('G.flatTyre === false && G.money === 900', 'respray $100 + ban pulih');
+  await E("(function(){ COPS.units.slice().forEach(function(u){ CARS.remove(u); }); COPS.units = []; COPS.setWanted(2); G.garageTrimUsed = false; G.sight.seen = false; G.sight.t = 0; return true; })()");
+  await E("PS.key('KeyY')");
+  await WF('G.wanted === 1 && G.money === 800', 'respray: wanted -1');
+  await E("PS.key('KeyU')"); await sleep(200);
+  await OB("!!G.fav && G.fav.key === 'cabrio'", 'favorit tersimpan');
+  await E("PS.key('KeyE')"); await sleep(200); await E("PS.key('KeyU')"); await sleep(300);
+  await OB("CARS.list.some(function(c){ return c.kind === 'fav'; })", 'favorit diambil lagi');
+
+  await E("PS.key('KeyN')");
+  await WF('WORLD.nightF > 0.3', 'Neon Night naik', 8000);
+  await OB('WORLD.rainCount === 260 && !!ULTRA.spawnCashVan()', 'hujan 260 + cash van');
+  const moneyBeforeLoot = await E('G.money'), wantedBeforeLoot = await E('G.wanted');
+  await E("(function(){ var v = ULTRA.cashVan; v.health = 30; if (G.playerCar) PLAYER.exitCar(); PLAYER.mesh.position.set(v.mesh.position.x + 1.5, 0, v.mesh.position.z); return true; })()");
+  await E("PS.key('KeyE')"); await sleep(300);
+  ok(await B('G.money > ' + moneyBeforeLoot + ' && G.wanted === ' + Math.min(5, wantedBeforeLoot + 2)), 'cash van dibajak');
+
+  let total = 0;
+  async function walk(dir, skip) {
+    for (const name of await readdir(dir)) {
+      if (skip.includes(name)) continue;
+      const p = join(dir, name), s = await stat(p);
+      if (s.isDirectory()) await walk(p, skip); else total += s.size;
+    }
   }
-  await page.keyboard.up('w');
-  check('walks with WASD', walked > 3, `moved ${walked.toFixed(1)}m from ${JSON.stringify(p0)}`);
-  // Teleport next to a traffic car and steal it with E. The target's speed
-  // is zeroed for the staging: at full frame rate the car otherwise drives
-  // out of the 3.4m interaction radius during the fixed wait.
-  await ev(() => { const G = window.__game; const car = G.cars.find((c) => c.kind === 'traffic'); car.speed = 0; G.player.x = car.mesh.position.x + 2; G.player.z = car.mesh.position.z; G.player.mesh.position.set(G.player.x, 0, G.player.z); });
-  await page.waitForTimeout(300);
-  await page.keyboard.press('e');
-  await page.waitForTimeout(400);
-  check('E steals a car', await G('!!G.player.car'));
-  check('theft registered (stolen flag)', await G('G.player.car && G.player.car.stolen === true'));
-  // Drive and check speed — poll, because acceleration is game-time based.
-  await page.keyboard.down('w');
-  let spd = 0;
-  for (let i = 0; i < 26 && spd <= 4; i++) { await page.waitForTimeout(300); spd = await G('G.player.car ? Math.abs(G.player.car.speed) : 0'); }
-  check('car accelerates', spd > 4, `speed ${spd.toFixed(1)}`);
-  await page.keyboard.up('w');
-  // Radio: R retunes the station and the bar names the new one.
-  const st0 = await G('G.audio.stationIndex');
-  await page.keyboard.press('r');
-  check('R changes the tuned station', await poll(`G.audio.stationIndex !== ${st0}`, 12, 300));
-  check('radio bar names the station and its track', await G("(() => { const el = document.getElementById('radiobar'); const st = G.audio.station; return el.textContent.includes(st.name) && el.textContent.includes(st.track); })()"));
-  // Collision: park the car south of a big building, aimed north into it, and floor it.
-  await ev(() => { const G = window.__game; const clear = (x, z, pad) => !G.colliders.some((b) => Math.abs(x - b.x) < b.hw + pad && Math.abs(z - b.z) < b.hd + pad); const c = G.colliders.find((b) => !b.soft && b.hw > 3 && clear(b.x, b.z + b.hd + 16, 3)); const car = G.player.car; car.mesh.position.set(c.x, 0, c.z + c.hd + 16); car.angle = Math.PI; car.speed = 0; });
-  await page.keyboard.down('w');
-  let hitWall = false;
-  for (let i = 0; i < 120 && !hitWall; i++) {
-    await page.waitForTimeout(500);
-    hitWall = await G('(() => { const car = G.player.car; const c = G.colliders.find((b) => !b.soft && Math.abs(car.mesh.position.x - b.x) < b.hw + 2 && Math.abs(car.mesh.position.z - b.z) < b.hd + 3); return !!c; })()');
-  }
-  await page.keyboard.up('w');
-  check('building collision stops car at wall', hitWall);
-  // Wanted: force 1 star, police should spawn; then 3 stars and more cruisers.
-  await ev(() => { const G = window.__game; if (G.player.car) { const c = G.player.car; G.player.car = null; c.kind = 'parked'; G.player.mesh.visible = true; } G.wanted = 1; G.hiddenT = 0; });
-  let copSpawned = false;
-  for (let i = 0; i < 60 && !copSpawned; i++) {
-    await page.waitForTimeout(500);
-    copSpawned = await G('G.cars.some(c => c.model.id === "police")');
-  }
-  check('wanted 1 spawns police', copSpawned);
-  // Pursuit: the nearest cruiser must close distance on the stationary player.
-  const copDist = () => G('(() => { const cs = G.cars.filter(c => c.model.id === "police"); return cs.length ? Math.min(...cs.map(c => Math.hypot(c.mesh.position.x - G.player.x, c.mesh.position.z - G.player.z))) : -1; })()');
-  const copD0 = await copDist();
-  let copD1 = copD0, pursued = false;
-  for (let i = 0; i < 120 && !pursued; i++) {
-    await page.waitForTimeout(500);
-    copD1 = await copDist();
-    if (copD1 >= 0 && (copD1 < copD0 - 12 || copD1 < 16)) pursued = true;
-    if ((await G('G.state')) !== 'playing') break; // busted mid-pursuit also proves the chase works
-  }
-  check('police pursue the player', pursued || (await G('G.state')) !== 'playing', `nearest cruiser ${copD0.toFixed(0)}m -> ${copD1.toFixed(0)}m`);
-  await ev(() => { const G = window.__game; if (G.state === 'playing') G.wanted = 3; });
-  let copCount = 0;
-  for (let i = 0; i < 180 && copCount < 2; i++) {
-    await page.waitForTimeout(1000);
-    await ev(() => { const G = window.__game; if (G.state === 'playing' && G.wanted < 3) G.wanted = 3; });
-    copCount = await G('G.cars.filter(c => c.model.id === "police").length');
-  }
-  check('wanted 3 scales police', copCount >= 2, `${copCount} cruisers`);
-  // At three stars the helicopter is up and dispatch names it.
-  check('helicopter rises at three stars', await poll('!!G.heli', 30, 400));
-  check('dispatch panel names PSPD and AIR-1', await poll("(() => { const el = document.getElementById('dispatchpanel'); return el && !el.classList.contains('hidden') && el.textContent.includes('PSPD DISPATCH') && el.textContent.includes('AIR-1'); })()", 30, 400));
-  check('sight chip shows IN SIGHT or LOSING THEM', await poll("(() => { const el = document.getElementById('sightchip'); return el && !el.classList.contains('hidden') && /IN SIGHT|LOSING THEM/.test(el.textContent); })()", 30, 400));
-  // Escape: hide on the pier with cops teleported far away until stars decay.
-  await ev(() => { const G = window.__game; G.wanted = 3; G.player.x = -100; G.player.z = 130; G.player.mesh.position.set(-100, 0, 130); G.cars.filter((c) => c.model.id === 'police').forEach((c) => { c.mesh.position.set(100, 0, -100); c.speed = 0; }); G.hiddenT = 99; });
-  let decayed = false;
-  for (let i = 0; i < 260 && !decayed; i++) {
-    await page.waitForTimeout(1000);
-    await ev(() => { const G = window.__game; G.player.x = -100; G.player.z = 130; G.cars.filter((c) => c.model.id === 'police').forEach((c) => { if (Math.hypot(c.mesh.position.x + 100, c.mesh.position.z - 130) < 62) { c.mesh.position.set(100, 0, -100); c.speed = 0; } }); });
-    decayed = (await G('G.wanted')) === 0;
-  }
-  check('wanted decays when hidden', decayed, `wanted=${await G('G.wanted')}`);
-  check('helicopter leaves when the heat dies', await poll('!G.heli', 30, 400));
-  // Mission 1 end to end on a fresh story: steal, deliver to the chop shop.
-  await page.reload({ waitUntil: 'networkidle' });
-  await page.waitForTimeout(800);
-  await ev(() => localStorage.clear());
-  await page.click('#btn-start');
-  await page.waitForTimeout(500);
-  await ev(() => { const G = window.__game; const car = G.cars.find((c) => c.kind === 'traffic'); car.speed = 0; G.player.x = car.mesh.position.x + 2; G.player.z = car.mesh.position.z; G.player.mesh.position.set(G.player.x, 0, G.player.z); });
-  await page.waitForTimeout(250);
-  await page.keyboard.press('e');
-  await page.waitForTimeout(300);
-  check('mission run: car stolen again', await G('!!G.player.car'));
-  const cashBefore = await G('G.cash');
-  await ev(() => { const G = window.__game; G.player.car.mesh.position.set(-52, 0, -52 + 7); G.player.car.speed = 0; });
-  let cashAfter = cashBefore;
-  for (let i = 0; i < 60 && cashAfter <= cashBefore; i++) {
-    await page.waitForTimeout(500);
-    cashAfter = await G('G.cash');
-  }
-  check('mission 1 completes at chop shop', cashAfter > cashBefore, `cash ${cashBefore} -> ${cashAfter}`);
-  check('save written', await ev(() => !!localStorage.getItem('palmshade-heat-save-v1')));
-  // The economy moved with the job: standing in Old Town (the sale and
-  // the finish both happened there) and respect for a completed mission.
-  check('standing rose in Old Town after sale + finish', await G("G.standing['Old Town'] > 50"), `standing=${await G("G.standing['Old Town']")}`);
-  check('respect reached the first rung after mission 1', await G('G.respect >= 120'), `respect=${await G('G.respect')}`);
-  // A second steal feeds the career counter.
-  await ev(() => { const G = window.__game; const car = G.cars.find((c) => c.kind === 'traffic'); car.speed = 0; G.player.x = car.mesh.position.x + 2; G.player.z = car.mesh.position.z; G.player.mesh.position.set(G.player.x, 0, G.player.z); });
-  await page.waitForTimeout(250);
-  await page.keyboard.press('e');
-  await page.waitForTimeout(300);
-  check('career counter counts stolen cars', await G('G.stats.stolen >= 2'), `stolen=${await G('G.stats.stolen')}`);
-  // Armour absorbs before health: 30 damage against 50 armour.
-  const healthBefore = await G('G.player.health');
-  await ev(() => { const G = window.__game; G.player.armour = 50; G.damagePlayer(30); });
-  check('armour absorbs damage before health', await G('G.player.armour === 20') && (await G('G.player.health')) === healthBefore,
-    `armour=${await G('G.player.armour')} health=${await G('G.player.health')}`);
-  // Crew: QUICK FIX patches a 40% car to 85% and starts its cooldown.
-  await ev(() => { const G = window.__game; if (G.player.car) G.player.car.health = 40; });
-  await page.keyboard.press('x');
-  check('QUICK FIX repairs 40 -> 85 and cools down', await poll('G.player.car && G.player.car.health === 85 && G.crew.cds.fix > G.time', 20, 300));
-  // Crew: SWAP PLATES drops exactly one star.
-  await ev(() => { const G = window.__game; G.wanted = 2; });
-  await page.keyboard.press('z');
-  check('SWAP PLATES drops one star', await poll('G.wanted === 1', 20, 300));
-  await ev(() => { const G = window.__game; G.wanted = 0; });
-  // Crew: EYES OUT opens the lookout window.
-  await page.keyboard.press('c');
-  check('EYES OUT opens the lookout window', await poll('G.crew.eyesUntil > G.time', 20, 300));
-  // Fence panel: park the stolen car 12 m from the bay — close enough to
-  // quote, too far to sell — and the panel names the real fence value.
-  await ev(() => { const G = window.__game; const car = G.player.car; car.mesh.position.set(-52, 0, -33); car.speed = 0; });
-  check('fence panel quotes a dollar value near the shop', await poll("(() => { const el = document.getElementById('fencepanel'); return el && !el.classList.contains('hidden') && el.textContent.includes('$'); })()", 24, 300));
-  // Near miss: thread past a parked traffic car at speed, laterally ~4 m.
-  await ev(() => { const G = window.__game; const car = G.player.car; car.mesh.position.set(0, 0, 40); car.angle = 0; car.speed = 22; G.player.x = 0; G.player.z = 40; const t = G.cars.filter((c) => c.kind === 'traffic').sort((a, b) => Math.hypot(a.mesh.position.x, a.mesh.position.z - 50) - Math.hypot(b.mesh.position.x, b.mesh.position.z - 50))[0]; t.speed = 0; t.cruiseSpeed = 0; t.waypoint = null; t.mesh.position.set(3.8, 0, 56); G._nmCar = t; });
-  for (let i = 0; i < 24; i++) {
-    const done = await ev(() => { const G = window.__game; const c = G.player.car; if (!c) return true; if (c.mesh.position.z < 62) c.speed = 22; if (G._nmCar && c.mesh.position.z < 58) { G._nmCar.speed = 0; G._nmCar.mesh.position.set(3.8, 0, 56); } return G.stats.nearMiss >= 1 || c.mesh.position.z > 70; });
-    if (done) break;
-    await page.waitForTimeout(200);
-  }
-  check('a close pass at speed scores a near miss', await G('G.stats.nearMiss >= 1'), `nearMiss=${await G('G.stats.nearMiss')}`);
-  check('near-miss toast shows with the respect line', await G("(() => { const el = document.getElementById('nmtoast'); return el && !el.classList.contains('hidden') && el.textContent.includes('NEAR MISS'); })()"));
-  // Damage smoke reads on a hurt traffic car.
-  await ev(() => { const G = window.__game; const t = G.cars.find((c) => c.kind === 'traffic'); if (t) t.health = 20; });
-  check('a car at 20% health shows its smoke', await poll("(() => { const t = G.cars.find((c) => c.kind === 'traffic' && c.health === 20); return t && t.smoke.visible === true; })()", 24, 300));
-  // Roadblock: at four stars a far cruiser is designated, and the
-  // minimap draws its barricade marker. Cops are held far away while
-  // waiting so the stationary player is not busted mid-check.
-  await ev(() => { const G = window.__game; G.wanted = 4; });
-  let rbOk = false;
-  for (let i = 0; i < 40 && !rbOk; i++) {
-    await page.waitForTimeout(500);
-    await ev(() => { const G = window.__game; if (G.state === 'playing' && G.wanted < 4) G.wanted = 4; G.cars.filter((c) => c.model.id === 'police').forEach((c, k) => { if (!c.roadblock) { c.mesh.position.set(90 - k * 6, 0, -90); c.speed = 0; } }); });
-    rbOk = await G('G.cars.some((c) => !!c.roadblock)');
-  }
-  check('a roadblock unit is designated at four stars', rbOk);
-  check('minimap draws the roadblock barricade marker', await poll('G.hud.rbMark === true', 16, 400));
-  await ev(() => { const G = window.__game; G.wanted = 0; G.cars.filter((c) => c.model.id === 'police').forEach((c) => { c.roadblock = null; }); });
-  // Pause opens the career panel with its completion header and rows.
-  await page.keyboard.press('p');
-  await page.waitForTimeout(300);
-  check('pause opens the career stats panel', await G('G.state') === 'paused' &&
-    await G("(() => { const el = document.getElementById('statspanel'); return el && !el.classList.contains('hidden') && el.textContent.includes('COMPLETE') && el.textContent.includes('Cars stolen') && el.textContent.includes('Respect'); })()"));
-  await page.click('#btn-resume');
-  await page.waitForTimeout(300);
-  check('resume hides the stats panel', await G('G.state') === 'playing');
-  // The kevlar vest outside the station tops armour up.
-  await ev(() => { const G = window.__game; if (G.player.car) { G.player.car.speed = 0; G.exitCar(); } G.player.x = 26; G.player.z = -71.2; G.player.mesh.position.set(26, 0, -71.2); G.player.armour = 0; });
-  check('kevlar vest at the station tops armour up', await poll('G.player.armour === 100', 16, 300),
-    `armour=${await G('G.player.armour')}`);
-  // Fire the pistol on foot: the shot must stamp a fresh danger marker.
-  const dangerT0 = await G('G.danger ? G.danger.t : -1');
-  let fired = false;
-  for (let i = 0; i < 30 && !fired; i++) {
-    if (i % 10 === 0) await page.keyboard.press('f');
-    await page.waitForTimeout(500);
-    fired = (await G('G.danger ? G.danger.t : -1')) > dangerT0;
-  }
-  check('pistol fires (danger set)', fired);
-  // Die and respawn at the hospital (the vest's 100 armour is eaten first).
-  await ev(() => { const G = window.__game; G.damagePlayer(999); });
-  await page.waitForTimeout(3400);
-  const afterDeath = await G('({state: G.state, health: G.player.health, x: G.player.x, z: G.player.z})');
-  check('WASTED respawns at hospital', afterDeath.state === 'playing' && afterDeath.health === 100 && Math.hypot(afterDeath.x + 78, afterDeath.z - 78) < 6, JSON.stringify(afterDeath));
-  // Get busted: stand still while a cruiser sits next to Rio at 2 stars.
-  await ev(() => { const G = window.__game; G.wanted = 2; const cop = G.cars.find((c) => c.model.id === 'police'); if (cop) { cop.mesh.position.set(G.player.x + 2, 0, G.player.z); cop.speed = 0; } });
-  let busted = false;
-  for (let i = 0; i < 40 && !busted; i++) {
-    await page.waitForTimeout(1000);
-    await ev(() => { const G = window.__game; const cop = G.cars.find((c) => c.model.id === 'police'); if (cop && G.state === 'playing') { cop.mesh.position.set(G.player.x + 2, 0, G.player.z); cop.speed = 0; } });
-    const pos = await G('({x: G.player.x, z: G.player.z, w: G.wanted})');
-    if (pos.w === 0 && Math.hypot(pos.x - 26, pos.z + 78) < 8) busted = true;
-  }
-  check('BUSTED respawns at station, wanted cleared', busted);
-  // Pause / resume.
-  await page.keyboard.press('p');
-  await page.waitForTimeout(300);
-  check('pause works', await G('G.state') === 'paused');
-  await page.click('#btn-resume');
-  await page.waitForTimeout(300);
-  check('resume works', await G('G.state') === 'playing');
-  // Reload and Continue the saved progress.
-  const savedCash = await G('G.cash');
-  await page.reload({ waitUntil: 'networkidle' });
-  await page.waitForTimeout(900);
-  check('Continue offered after reload', await page.isVisible('#btn-continue'));
-  await page.click('#btn-continue');
-  await page.waitForTimeout(500);
-  check('Continue restores cash', (await G('G.cash')) === savedCash, `saved ${savedCash}`);
-  check('no page errors overall', errors.length === 0, errors.slice(0, 4).join(' | '));
+  await walk(join(root, 'game'), ['vendor']);
+  for (const f of ['main.ts', 'serve.ts', 'README.md', 'shots.json', 'shots.mjs', 'playtest.mjs', 'cdp.mjs']) total += (await stat(join(root, f))).size;
+  ok(total <= 158000, 'guard ukuran: total source sendiri ' + total + ' byte <= 158.000');
+} catch (err) {
+  fail++;
+  console.log('SUITE ERROR: ' + (err && err.message));
 } finally {
-  await browser.close();
-  server.kill();
+  await page.close();
+  srv.close();
 }
-// Hand-in guard, exercised outside the browser: stage a throwaway copy of
-// this repo (main.ts + vendor + game + screenshots, well under 2 MB), plant
-// a screenshot one byte over the 262,144-byte per-screenshot cap, and run the
-// real hand-in program against it. It must refuse — non-zero exit — and its
-// error must name the offending file and its size, not fail silently or pass.
-{
-  const repoRoot = new URL('.', import.meta.url).pathname;
-  const stage = mkdtempSync(join(tmpdir(), 'palmshade-handin-'));
-  try {
-    for (const item of ['main.ts', 'vendor', 'game', 'screenshots']) {
-      cpSync(join(repoRoot, item), join(stage, item), { recursive: true });
-    }
-    writeFileSync(join(stage, 'screenshots', '9-oversized.jpg'), Buffer.alloc(262145));
-    const run = spawnSync('node', ['main.ts'], {
-      cwd: stage,
-      env: { ...process.env, MAKEFUN_OUTPUT_DIR: join(stage, 'out') },
-      encoding: 'utf8',
-    });
-    const said = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
-    check(
-      'hand-in rejects an oversized screenshot by name',
-      run.status !== 0 && said.includes('9-oversized.jpg') && said.includes('262145'),
-      `exit ${run.status}`,
-    );
-  } finally {
-    rmSync(stage, { recursive: true, force: true });
-  }
-}
-// Second hand-in guard, for the game/index.html cap (1 MiB): stage the
-// same throwaway copy, replace its game/index.html with a file one byte
-// over the cap, and run the real hand-in. It must refuse — non-zero exit —
-// with an error naming game/index.html and its size, from validatePayload's
-// sorted game/ walk, before any dossier is built.
-{
-  const repoRoot = new URL('.', import.meta.url).pathname;
-  const stage = mkdtempSync(join(tmpdir(), 'palmshade-handin-index-'));
-  try {
-    for (const item of ['main.ts', 'vendor', 'game', 'screenshots']) {
-      cpSync(join(repoRoot, item), join(stage, item), { recursive: true });
-    }
-    writeFileSync(join(stage, 'game', 'index.html'), Buffer.alloc(1048577));
-    const run = spawnSync('node', ['main.ts'], {
-      cwd: stage,
-      env: { ...process.env, MAKEFUN_OUTPUT_DIR: join(stage, 'out') },
-      encoding: 'utf8',
-    });
-    const said = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
-    check(
-      'hand-in rejects an oversized game/index.html by name',
-      run.status !== 0 && said.includes('index.html') && said.includes('1048577') && said.includes('1048576')
-        && !existsSync(join(stage, 'out', 'dossier.json')),
-      `exit ${run.status}`,
-    );
-  } finally {
-    rmSync(stage, { recursive: true, force: true });
-  }
-}
-const failed = results.filter((r) => !r.ok).length;
-console.log(`\n${results.length - failed}/${results.length} checks passed`);
-process.exit(failed ? 1 : 0);
+console.log('---');
+console.log('PLAYTEST: ' + pass + ' PASS, ' + fail + ' FAIL, total ' + (pass + fail) + ' pemeriksaan');
+process.exit(fail ? 1 : 0);
