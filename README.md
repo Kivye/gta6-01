@@ -1,87 +1,46 @@
-[![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
-[![rank](https://make.fun/badge/gta6-01/Kivye/gta6-01/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
-[![reward](https://make.fun/badge/gta6-01/Kivye/gta6-01/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![Make.fun Competition](https://img.shields.io/badge/Make.fun-Competition-blue)](https://make.fun/competitions/gta6-01)
+[![Repository](https://img.shields.io/badge/GitHub-Kivye%2Fgta6--01-green)](https://github.com/Kivye/gta6-01)
+**Competition:** [GTA6-01](https://make.fun/competitions/gta6-01) on Make.fun
 
-# PALMSHADE HEAT
+# Palmshade Heat
 
-Selamat datang di Palmshade, kota pantai tempat ambisi diukur dari seberapa
-berani kamu melanggar aturan. **PALMSHADE HEAT** adalah game kriminal
-dunia-terbuka berukuran kecil yang hidup sepenuhnya di dalam browser. Mesin
-grafisnya memakai Three.js, seluruh suaranya dibangkitkan langsung lewat
-audio prosedural Web Audio, dan proyek ini tidak butuh langkah build sama
-sekali — tidak ada aset eksternal yang harus diunduh. Jalankan servernya,
-buka halamannya, tekan **START ENGINE**, dan kota ini siap diperebutkan.
+Palmshade Heat adalah game aksi open-world yang dimainkan langsung di peramban. Pemain bebas berkeliling kota pesisir Palmshade, bergantian berjalan kaki dan mengemudikan mobil, menuntaskan rangkaian misi cerita, dan berhadapan dengan polisi yang makin agresif setiap kali tingkat buronan naik. Seluruh game ditulis dengan JavaScript dan Three.js tanpa proses build: sajikan saja berkasnya lewat server statis dan permainan langsung bisa dimainkan.
 
-## Jelajahi tiga distrik
+## Yang bisa dilakukan di dalam game
 
-Palmshade terbagi menjadi tiga kawasan yang masing-masing punya wajah
-sendiri:
+- **Delapan misi cerita berurutan.** Setiap misi dibuka dengan briefing dan ditutup dengan outro, dan misi berikutnya hanya terbuka setelah misi sebelumnya selesai.
+- **Sistem buronan bintang 1 sampai 5.** Polisi AI mengejar di jalanan, memasang blokade, dan memanggil helikopter AIR-1. Pada tingkat tertinggi muncul van SWAT lapis baja, dan khusus di bintang 5 polisi menggelar strip paku yang dapat mengempiskan ban mobil pemain.
+- **Tiga senjata dan Gun Van.** Pistol dengan peluru tak terbatas, Micro SMG berisi 120 peluru yang tetap dapat ditembakkan sambil mengemudi, dan Pump Shotgun berisi 24 peluru. Gun Van yang berkeliling kota menjual senjata, amunisi, dan kevlar kepada pemain.
+- **Balapan jalanan dengan taruhan.** Ada tiga lintasan bergerbang neon. Pemain memasang taruhan uang lalu beradu cepat melawan rival bernama yang masing-masing punya karakter balap sendiri.
+- **Delapan tanjakan stunt.** Lompatan yang berhasil memicu efek slow-motion sesaat dan menghadiahkan bonus uang.
+- **Properti yang bisa dibeli.** Tiga properti tersedia untuk dibeli, dan masing-masing membayar pemasukan pasif secara berkala kepada pemiliknya.
+- **Garasi respray.** Di sini mobil bisa dicat ulang, ban yang kempes gara-gara strip paku bisa diperbaiki, dan satu mobil favorit bisa disimpan untuk dipakai lagi nanti.
+- **Suasana malam neon dan hujan.** Kota tampil dalam preset malam berhias neon dengan hujan pesisir ringan yang turun terus selama permainan.
+- **Acara sampingan mobil kas.** Sesekali muncul mobil kas lapis baja yang bisa dibajak untuk mengambil uang yang dibawanya.
+- **Audio prosedural berlapis.** Bunyi mesin, tembakan, sirene, dan efek suara lainnya dibangkitkan langsung dari kode dan disusun berlapis mengikuti kejadian di layar.
 
-- **Marina** — dermaga, kapal pesiar, dan uang yang beredar cepat.
-- **Old Town** — gang-gang sempit dan urusan lama yang belum selesai.
-- **The Heights** — lingkungan elite tempat kesepakatan besar diputuskan.
+## Menjalankan secara lokal
 
-Jalanannya tidak pernah sepi: mobil lalu-lalang dan pejalan kaki berlalu
-di trotoar, dan semuanya ikut bereaksi begitu kamu mulai berulah.
+Cara paling sederhana adalah memakai server bawaan repo ini (membutuhkan Node 22 atau lebih baru):
 
-## Isi permainan
+```bash
+node main.ts
+```
 
-- **Delapan misi cerita** yang mengantar kamu dari pekerjaan remeh menuju
-  reputasi yang diperhitungkan di seluruh kota.
-- **Tiga balapan jalanan** dengan taruhan uang sungguhan — pasang taruhanmu,
-  kalahkan rival yang punya nama dan gaya menyetir sendiri, lalu kantongi
-  kemenangannya.
-- **Delapan tanjakan stunt** yang tersebar di berbagai sudut kota untuk
-  diuji lompatannya.
-- **Tiga properti berpenghasilan** yang bisa dibeli dan sesudahnya membayar
-  pemasukan berkala ke kantongmu.
-- **Garasi respray** untuk mengganti warna mobil, sekaligus tempat menyimpan
-  satu mobil favorit agar selalu bisa dipanggil kembali.
-- **Gun Van**, toko senjata keliling yang berkeliling kota dan menjual
-  perlengkapan yang lebih berat dari yang kamu bawa di awal.
+Setelah itu buka `http://localhost:8080` di peramban. Port dapat diganti lewat variabel lingkungan `PORT`. Alternatifnya, sajikan folder `game/` dengan server statis apa pun, lalu buka `index.html` yang ada di dalamnya.
 
-## Senjata dan buronan
+## Pemeriksaan otomatis
 
-Kamu membawa tiga slot senjata, dan masing-masing menghitung amunisinya
-dengan jujur: **Pistol** dengan peluru tak terbatas untuk situasi apa pun,
-**Micro SMG** untuk urusan cepat, dan **Pump Shotgun** untuk jarak dekat
-yang menyakitkan. Semakin besar kekacauan yang kamu buat, semakin serius
-tanggapan kepolisian Palmshade. Sistem wanted lima bintang menaikkan
-tekanan bertahap: mobil patroli datang lebih dulu, lalu helikopter **AIR-1**
-menyapu jalanan dengan sorot lampunya, disusul roadblock, van lapis baja
-**SWAT-1**, dan spike strip yang sanggup mengempiskan ban mobilmu di
-tengah pelarian. Untungnya kamu tidak bekerja sendirian — kru kamu punya
-kemampuan yang bisa dipanggil saat keadaan memburuk.
+Repo ini membawa perangkat uji headless berbasis Chrome DevTools Protocol yang dirangkai di `cdp.mjs`:
 
-Suasana kota pun bisa berubah total: aktifkan preset **Neon Night** dan
-hujan ringan khas pesisir, dan Palmshade terasa seperti kota yang berbeda.
+- `node playtest.mjs` — memainkan game secara headless dan menjalankan 93 pemeriksaan atas misi, sistem buronan, senjata, balapan, dan fitur lainnya.
+- `node shots.mjs` — merender empat screenshot resmi ke folder `screenshots/` sesuai daftar panggung di `shots.json`.
+- Dossier entri dibangun dengan fungsi `buildDossier` dari `vendor/makefun-game.ts`, pustaka resmi make.fun yang disertakan apa adanya di repo ini.
 
-## Progres yang tersimpan
+## Struktur berkas
 
-Perjalanan kariermu dicatat rapi sebagai statistik — misi yang tuntas,
-balapan yang dimenangkan, lompatan stunt, properti yang dimiliki, dan uang
-yang sudah dihasilkan. Semua progres itu disimpan secara lokal, jadi kamu
-bisa menutup permainan dan melanjutkannya lagi nanti dari titik terakhir.
-
-## Cara bermain
-
-Jalankan game ini lewat server bawaan pada port 8080, atau pakai server
-file statis apa pun yang kamu sukai, kemudian buka di browser dan tekan
-**START ENGINE**.
-
-| Tombol | Fungsi |
-| --- | --- |
-| WASD | Bergerak |
-| E | Masuk atau keluar mobil |
-| Mouse / Space | Menembak |
-| Shift | Nitro saat menyetir, sprint saat berjalan kaki |
-| T | Memulai balapan jalanan |
-| B | Membeli properti |
-| P | Jeda dan melihat statistik |
-
-## Pemeriksaan proyek
-
-Repo ini dilengkapi perangkat verifikasinya sendiri: sebuah rangkaian
-playtest headless berisi **93 pemeriksaan** yang memainkan game dari awal
-sampai akhir dan melaporkan hasilnya, ditambah perkakas render yang
-menghasilkan empat screenshot resmi permainan.
+- `game/` — seluruh game: `index.html`, `style.css`, kode sumber di `game/src/` (misi, polisi, kendaraan, senjata, audio, dunia, penyimpanan, dan lain-lain), serta Three.js di `game/vendor/`.
+- `main.ts` dan `serve.ts` — titik masuk dan server statis sederhana untuk menjalankan game secara lokal.
+- `playtest.mjs`, `shots.mjs`, `shots.json`, `cdp.mjs` — perangkat playtest headless dan perender screenshot.
+- `screenshots/` — empat tangkapan layar resmi entri ini.
+- `vendor/` — pustaka make.fun untuk membangun dossier.
