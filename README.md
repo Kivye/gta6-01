@@ -1,6 +1,6 @@
-[![Make.fun Competition](https://img.shields.io/badge/Make.fun-Competition-blue)](https://make.fun/competitions/gta6-01)
-[![Repository](https://img.shields.io/badge/GitHub-Kivye%2Fgta6--01-green)](https://github.com/Kivye/gta6-01)
-**Competition:** [GTA6-01](https://make.fun/competitions/gta6-01) on Make.fun
+[![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![rank](https://make.fun/badge/gta6-01/Kivye/gta6-01/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![reward](https://make.fun/badge/gta6-01/Kivye/gta6-01/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
 # Palmshade Heat
 
